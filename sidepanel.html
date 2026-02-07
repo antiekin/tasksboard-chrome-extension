@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tasksboard</title>
+  <link rel="stylesheet" href="sidepanel.css">
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>今日任务</h1>
+    </div>
+
+    <!-- Add Task Button -->
+    <button id="add-task-btn" class="add-task-btn">+ Add a task</button>
+
+    <!-- Active Tasks List -->
+    <div id="task-list-container" class="task-list-container">
+      <!-- Tasks will be rendered here -->
+    </div>
+
+    <!-- Completed Tasks Section -->
+    <div id="completed-section" class="completed-section">
+      <div class="completed-header" id="completed-header">
+        <span class="completed-title">Completed (<span id="completed-count">0</span>)</span>
+        <span class="collapse-icon">▼</span>
+      </div>
+      <div class="completed-list" id="completed-list">
+        <!-- Completed tasks will be rendered here -->
+      </div>
+    </div>
+
+    <!-- Empty State -->
+    <div id="empty-state" class="empty-state" style="display: none;">
+      <p>暂无任务</p>
+      <p class="empty-hint">点击上方添加第一个任务</p>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="storage.js"></script>
+  <script src="task-manager.js"></script>
+  <script src="sidepanel.js"></script>
+</body>
+</html>
