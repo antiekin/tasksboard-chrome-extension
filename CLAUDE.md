@@ -233,6 +233,21 @@ chrome.storage.local API
 - 元素间距：6px（原 8px）
 - 节省的空间全部用于任务内容显示
 
+## Token Usage
+
+项目开发过程中的 Token 使用统计：
+
+| Checkpoint | Date | Session | Tokens | Cost |
+|------------|------|---------|--------|------|
+| #1 | 2026-02-07 | Planning | ~55,000 | $0.17 |
+| #1 | 2026-02-07 | Implementation | 72,461 | $0.67 |
+| **Total** | - | **All** | **127,461** | **$0.84** |
+
+**成本明细：**
+- Input tokens: 89,222 ($0.27)
+- Output tokens: 38,238 ($0.57)
+- 定价：Claude Sonnet 4.5 - Input $3/M, Output $15/M
+
 ## 版本历史
 
 **v1.0.0 (2026-02-07)**

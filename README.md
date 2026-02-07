@@ -157,6 +157,8 @@ chrome.storage.local API
 - 原生 JavaScript（零依赖）
 - 三层架构：UI Layer → Business Logic → Storage Layer
 
+**Token 使用：** 127,461 tokens ($0.84)
+
 **项目状态：** ✅ 生产就绪（Production Ready）
 
 ## 🤝 贡献
