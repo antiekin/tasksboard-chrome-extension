@@ -55,11 +55,30 @@ body {
 /* Header */
 .header {
   margin-bottom: var(--spacing-lg);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .header h1 {
   font-size: 24px;
   font-weight: 600;
+  color: var(--color-text);
+}
+
+.settings-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all var(--transition-fast);
+}
+
+.settings-btn:hover {
+  background: var(--color-hover);
   color: var(--color-text);
 }
 
@@ -376,4 +395,131 @@ body {
 /* Drag and Drop Visual Feedback */
 .task-item.drag-over {
   border-top: 2px solid var(--priority-b);
+}
+
+/* Settings Panel */
+.settings-panel {
+  background: var(--color-hover);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-lg);
+}
+
+.settings-field {
+  margin-bottom: var(--spacing-sm);
+}
+
+.settings-field label {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-bottom: 4px;
+}
+
+.settings-field input[type="text"],
+.settings-field input[type="password"] {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 13px;
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.settings-field input[type="text"]:focus,
+.settings-field input[type="password"]:focus {
+  outline: none;
+  border-color: var(--priority-b);
+}
+
+.settings-field input[type="checkbox"] {
+  margin-right: 6px;
+}
+
+.settings-actions {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+}
+
+.settings-action-btn {
+  padding: 6px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--color-bg);
+  color: var(--color-text);
+  transition: all var(--transition-fast);
+}
+
+.settings-action-btn:hover {
+  background: var(--color-hover);
+}
+
+.settings-action-btn.primary {
+  background: var(--priority-b);
+  color: white;
+  border-color: var(--priority-b);
+}
+
+.settings-action-btn.primary:hover {
+  opacity: 0.9;
+}
+
+.connection-status {
+  margin-top: var(--spacing-sm);
+  font-size: 12px;
+  padding: 6px 8px;
+  border-radius: 4px;
+}
+
+.connection-status.success {
+  background: #e6f4ea;
+  color: #137333;
+}
+
+.connection-status.error {
+  background: #fce8e6;
+  color: #c5221f;
+}
+
+/* Sync Status Indicator */
+.sync-indicator {
+  position: fixed;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--color-text-secondary);
+  cursor: default;
+  padding: 4px 8px;
+  border-radius: 12px;
+  background: var(--color-hover);
+}
+
+.sync-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-secondary);
+  flex-shrink: 0;
+}
+
+.sync-dot.connected {
+  background: #34a853;
+}
+
+.sync-dot.syncing {
+  background: var(--priority-a);
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }

@@ -66,5 +66,43 @@ const storage = {
         }
       });
     });
+  },
+
+  /**
+   * Get sync configuration
+   * @returns {Promise<Object>} Sync config object
+   */
+  async getSyncConfig() {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.get(['syncConfig'], (result) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve(result.syncConfig || {
+            apiKey: '',
+            vaultPath: '0. 目标及计划/Daily',
+            syncEnabled: false,
+            pollInterval: 3000
+          });
+        }
+      });
+    });
+  },
+
+  /**
+   * Save sync configuration
+   * @param {Object} syncConfig - Sync config object
+   * @returns {Promise<void>}
+   */
+  async saveSyncConfig(syncConfig) {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.set({ syncConfig }, () => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve();
+        }
+      });
+    });
   }
 };

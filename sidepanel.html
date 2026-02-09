@@ -11,6 +11,30 @@
     <!-- Header -->
     <div class="header">
       <h1>今日任务</h1>
+      <button id="settings-btn" class="settings-btn" title="同步设置">&#9881;</button>
+    </div>
+
+    <!-- Settings Panel (hidden by default) -->
+    <div id="settings-panel" class="settings-panel" style="display:none;">
+      <div class="settings-field">
+        <label for="sync-enabled-input">
+          <input type="checkbox" id="sync-enabled-input" />
+          启用 Obsidian 同步
+        </label>
+      </div>
+      <div class="settings-field">
+        <label for="api-key-input">API Key</label>
+        <input type="password" id="api-key-input" placeholder="Obsidian Local REST API Key" />
+      </div>
+      <div class="settings-field">
+        <label for="vault-path-input">Vault 路径</label>
+        <input type="text" id="vault-path-input" value="0. 目标及计划/Daily" />
+      </div>
+      <div class="settings-actions">
+        <button id="test-connection-btn" class="settings-action-btn">测试连接</button>
+        <button id="save-settings-btn" class="settings-action-btn primary">保存</button>
+      </div>
+      <div id="connection-status" class="connection-status" style="display:none;"></div>
     </div>
 
     <!-- Add Task Button -->
@@ -37,11 +61,18 @@
       <p>暂无任务</p>
       <p class="empty-hint">点击上方添加第一个任务</p>
     </div>
+
+    <!-- Sync Status Indicator -->
+    <div id="sync-indicator" class="sync-indicator" style="display:none;" title="Obsidian 同步状态">
+      <span id="sync-dot" class="sync-dot"></span>
+      <span id="sync-label" class="sync-label">离线</span>
+    </div>
   </div>
 
   <!-- Scripts -->
   <script src="storage.js"></script>
   <script src="task-manager.js"></script>
+  <script src="obsidian-sync.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

@@ -7,6 +7,10 @@
     "storage",
     "sidePanel"
   ],
+  "host_permissions": [
+    "https://127.0.0.1:27124/*",
+    "http://127.0.0.1:27123/*"
+  ],
   "side_panel": {
     "default_path": "sidepanel.html"
   },

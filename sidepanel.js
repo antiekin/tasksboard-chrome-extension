@@ -7,10 +7,16 @@ const taskManager = new TaskManager();
 // DOM elements
 let taskListContainer, completedList, completedSection, completedHeader;
 let addTaskBtn, emptyState, completedCount;
+let settingsBtn, settingsPanel, syncIndicator, syncDot, syncLabel;
+let apiKeyInput, vaultPathInput, syncEnabledInput;
+let testConnectionBtn, saveSettingsBtn, connectionStatus;
 
 // State
 let preferences = { completedSectionExpanded: false };
 let saveTimeout = null;
+
+/** @type {ObsidianSync|null} */
+let obsidianSync = null;
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -23,11 +29,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   emptyState = document.getElementById('empty-state');
   completedCount = document.getElementById('completed-count');
 
+  // Settings & sync DOM elements
+  settingsBtn = document.getElementById('settings-btn');
+  settingsPanel = document.getElementById('settings-panel');
+  syncIndicator = document.getElementById('sync-indicator');
+  syncDot = document.getElementById('sync-dot');
+  syncLabel = document.getElementById('sync-label');
+  apiKeyInput = document.getElementById('api-key-input');
+  vaultPathInput = document.getElementById('vault-path-input');
+  syncEnabledInput = document.getElementById('sync-enabled-input');
+  testConnectionBtn = document.getElementById('test-connection-btn');
+  saveSettingsBtn = document.getElementById('save-settings-btn');
+  connectionStatus = document.getElementById('connection-status');
+
   // Load data
   await loadData();
 
   // Setup event listeners
   setupEventListeners();
+
+  // Initialize sync
+  await initSync();
 
   // Initial render
   renderTasks();
@@ -62,6 +84,15 @@ function setupEventListeners() {
 
   // Completed section toggle
   completedHeader.addEventListener('click', toggleCompletedSection);
+
+  // Settings panel toggle
+  settingsBtn.addEventListener('click', toggleSettingsPanel);
+
+  // Save settings
+  saveSettingsBtn.addEventListener('click', handleSaveSettings);
+
+  // Test connection
+  testConnectionBtn.addEventListener('click', handleTestConnection);
 }
 
 /**
@@ -348,14 +379,26 @@ function handleDeleteTask(taskId) {
 
 /**
  * Save tasks with debouncing (300ms)
+ * Also syncs to Obsidian if sync is enabled
  */
 function saveTasksDebounced() {
   if (saveTimeout) {
     clearTimeout(saveTimeout);
   }
+  // Mark that we have pending local changes (prevents remote overwrite during active editing)
+  if (obsidianSync) {
+    obsidianSync.pendingLocalChanges = true;
+  }
+
   saveTimeout = setTimeout(async () => {
     try {
-      await storage.saveTasks(taskManager.getAllTasks());
+      const allTasks = taskManager.getAllTasks();
+      // Save to chrome.storage.local (always, as cache/fallback)
+      await storage.saveTasks(allTasks);
+      // Sync to Obsidian if connected
+      if (obsidianSync?.connected) {
+        await obsidianSync.syncToRemote(allTasks);
+      }
     } catch (error) {
       console.error('Failed to save tasks:', error);
       showError('保存失败，请重试');
@@ -370,4 +413,164 @@ function showError(message) {
   // Simple error notification (could be enhanced with a toast system)
   console.error(message);
   alert(message);
+}
+
+// ─── Obsidian Sync Integration ───
+
+/**
+ * Initialize Obsidian sync from saved configuration
+ */
+async function initSync() {
+  try {
+    const syncConfig = await storage.getSyncConfig();
+
+    // Populate settings form
+    syncEnabledInput.checked = syncConfig.syncEnabled;
+    apiKeyInput.value = syncConfig.apiKey;
+    vaultPathInput.value = syncConfig.vaultPath;
+
+    if (syncConfig.syncEnabled && syncConfig.apiKey) {
+      obsidianSync = new ObsidianSync(syncConfig);
+      obsidianSync.onRemoteChange = handleRemoteChange;
+      obsidianSync.onConnectionChange = updateSyncIndicator;
+
+      // Show sync indicator
+      syncIndicator.style.display = 'flex';
+
+      // Test connection first (determines HTTPS vs HTTP URL)
+      const connected = await obsidianSync.testConnection();
+      if (connected) {
+        // Try initial sync: load from remote if available
+        const remoteMd = await obsidianSync.readRemoteFile();
+        if (remoteMd) {
+          const remoteTasks = obsidianSync.markdownToTasks(remoteMd);
+          obsidianSync.lastSyncedContent = remoteMd;
+          taskManager.loadFromParsedTasks(remoteTasks);
+          await storage.saveTasks(taskManager.getAllTasks());
+        } else {
+          // Connected but no file yet — push current tasks to create the file
+          await obsidianSync.syncToRemote(taskManager.getAllTasks());
+        }
+
+        // Start polling for changes
+        obsidianSync.startPolling();
+      }
+    }
+  } catch (error) {
+    console.error('Failed to initialize sync:', error);
+  }
+}
+
+/**
+ * Handle remote changes detected by polling
+ * @param {Array} remoteTasks - Tasks parsed from remote markdown
+ */
+function handleRemoteChange(remoteTasks) {
+  taskManager.loadFromParsedTasks(remoteTasks);
+  renderTasks();
+  // Update local cache
+  storage.saveTasks(taskManager.getAllTasks());
+}
+
+/**
+ * Update sync status indicator
+ * @param {boolean} connected
+ */
+function updateSyncIndicator(connected) {
+  if (!syncIndicator) return;
+
+  syncIndicator.style.display = 'flex';
+
+  if (connected) {
+    syncDot.className = 'sync-dot connected';
+    syncLabel.textContent = '已同步';
+  } else {
+    syncDot.className = 'sync-dot';
+    syncLabel.textContent = '离线';
+  }
+}
+
+/**
+ * Toggle settings panel visibility
+ */
+function toggleSettingsPanel() {
+  const isHidden = settingsPanel.style.display === 'none';
+  settingsPanel.style.display = isHidden ? 'block' : 'none';
+  // Hide connection status when toggling
+  connectionStatus.style.display = 'none';
+}
+
+/**
+ * Handle save settings button click
+ */
+async function handleSaveSettings() {
+  const syncConfig = {
+    syncEnabled: syncEnabledInput.checked,
+    apiKey: apiKeyInput.value.trim(),
+    vaultPath: vaultPathInput.value.trim() || '0. 目标及计划/Daily',
+    pollInterval: 3000
+  };
+
+  try {
+    await storage.saveSyncConfig(syncConfig);
+
+    // Stop existing sync if running
+    if (obsidianSync) {
+      obsidianSync.stopPolling();
+      obsidianSync = null;
+    }
+
+    // Restart sync with new config
+    if (syncConfig.syncEnabled && syncConfig.apiKey) {
+      obsidianSync = new ObsidianSync(syncConfig);
+      obsidianSync.onRemoteChange = handleRemoteChange;
+      obsidianSync.onConnectionChange = updateSyncIndicator;
+      syncIndicator.style.display = 'flex';
+
+      // Test connection first, then push current tasks
+      const connected = await obsidianSync.testConnection();
+      if (connected) {
+        await obsidianSync.syncToRemote(taskManager.getAllTasks());
+        obsidianSync.startPolling();
+      }
+    } else {
+      syncIndicator.style.display = 'none';
+    }
+
+    // Close settings panel
+    settingsPanel.style.display = 'none';
+  } catch (error) {
+    console.error('Failed to save settings:', error);
+    showError('设置保存失败');
+  }
+}
+
+/**
+ * Handle test connection button click
+ */
+async function handleTestConnection() {
+  const apiKey = apiKeyInput.value.trim();
+  const vaultPath = vaultPathInput.value.trim() || '0. 目标及计划/Daily';
+
+  if (!apiKey) {
+    connectionStatus.textContent = '请输入 API Key';
+    connectionStatus.className = 'connection-status error';
+    connectionStatus.style.display = 'block';
+    return;
+  }
+
+  connectionStatus.textContent = '测试中...';
+  connectionStatus.className = 'connection-status';
+  connectionStatus.style.display = 'block';
+
+  const testSync = new ObsidianSync({ apiKey, vaultPath });
+  const connected = await testSync.testConnection();
+
+  if (connected) {
+    connectionStatus.textContent = '连接成功！Obsidian Local REST API 已响应';
+    connectionStatus.className = 'connection-status success';
+  } else {
+    connectionStatus.textContent = '连接失败。请确认 Obsidian 正在运行且 Local REST API 插件已启用';
+    connectionStatus.className = 'connection-status error';
+  }
 }

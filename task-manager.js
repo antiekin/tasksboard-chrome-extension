@@ -4,6 +4,8 @@
 class TaskManager {
   constructor() {
     this.tasks = [];
+    /** @type {number|null} Timestamp of last local mutation */
+    this.lastModifiedAt = null;
   }
 
   /**
@@ -45,6 +47,7 @@ class TaskManager {
     };
 
     this.tasks.push(task);
+    this.lastModifiedAt = Date.now();
     return task;
   }
 
@@ -59,6 +62,7 @@ class TaskManager {
     if (!task) return null;
 
     Object.assign(task, updates);
+    this.lastModifiedAt = Date.now();
     return task;
   }
 
@@ -72,6 +76,7 @@ class TaskManager {
     if (index === -1) return false;
 
     this.tasks.splice(index, 1);
+    this.lastModifiedAt = Date.now();
     return true;
   }
 
@@ -86,6 +91,7 @@ class TaskManager {
 
     task.completed = !task.completed;
     task.completedAt = task.completed ? new Date().toISOString() : null;
+    this.lastModifiedAt = Date.now();
 
     return task;
   }
@@ -103,6 +109,7 @@ class TaskManager {
     const currentIndex = priorityLevels.indexOf(task.priority);
     const nextIndex = (currentIndex + 1) % priorityLevels.length;
     task.priority = priorityLevels[nextIndex];
+    this.lastModifiedAt = Date.now();
 
     return task;
   }
@@ -187,5 +194,17 @@ class TaskManager {
    */
   getAllTasks() {
     return this.tasks;
+  }
+
+  /**
+   * Load tasks from remote parsed data (replaces today's tasks only)
+   * Does NOT update lastModifiedAt since this is a remote load
+   * @param {Array} parsedTasks - Tasks parsed from Obsidian markdown
+   */
+  loadFromParsedTasks(parsedTasks) {
+    const today = this.getTodayDate();
+    // Keep non-today tasks, replace today's tasks with parsed ones
+    const nonTodayTasks = this.tasks.filter(t => t.createdAt !== today);
+    this.tasks = [...nonTodayTasks, ...parsedTasks];
   }
 }
