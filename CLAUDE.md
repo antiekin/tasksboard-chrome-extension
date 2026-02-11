@@ -245,7 +245,8 @@ chrome.storage.local API            Obsidian Local REST API
 | #2 | 2026-02-07 | Obsidian Sync | ~93,000 | $2.09 |
 | #3 | 2026-02-09~10 | Sync refinement + checkpoint | ~148,000 | $5.86 |
 | #4 | 2026-02-11 | Clean Markdown + mobile | ~178,000 | $5.88 |
-| **Total** | - | **All** | **~546,400** | **$14.67** |
+| #5 | 2026-02-11 | API key security | ~87,000 | $2.87 |
+| **Total** | - | **All** | **~633,400** | **$17.54** |
 
 **成本明细：**
 - Checkpoint #1: Claude Sonnet 4.5 - Input $3/M, Output $15/M

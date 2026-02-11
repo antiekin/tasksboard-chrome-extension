@@ -192,6 +192,16 @@ chrome.storage.local API
 
 **Token 使用：** ~178,000 tokens ($5.88) | 累计 ~546,400 tokens ($14.67)
 
+### 2026-02-11 17:30 - Checkpoint #5 (API Key Security)
+
+**自上次 checkpoint 以来完成内容：**
+- ✅ 创建 `~/.claude/api-keys.json` 集中管理密钥
+- ✅ 清理 settings.local.json 中两条含明文密钥的 permission 条目
+- ✅ 更新 checkpoint skill：禁止自动添加含密钥的命令，新增 permissions 变更报告
+- ✅ 全局 CLAUDE.md 新增 API Key Management 规则
+
+**Token 使用：** ~87,000 tokens ($2.87) | 累计 ~633,400 tokens ($17.54)
+
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
