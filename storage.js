@@ -90,6 +90,39 @@ const storage = {
   },
 
   /**
+   * Get last rollover date
+   * @returns {Promise<string|null>} Date string (YYYY-MM-DD) or null
+   */
+  async getLastRolloverDate() {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.get(['lastRolloverDate'], (result) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve(result.lastRolloverDate || null);
+        }
+      });
+    });
+  },
+
+  /**
+   * Save last rollover date
+   * @param {string} dateStr - Date string (YYYY-MM-DD)
+   * @returns {Promise<void>}
+   */
+  async setLastRolloverDate(dateStr) {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.set({ lastRolloverDate: dateStr }, () => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve();
+        }
+      });
+    });
+  },
+
+  /**
    * Save sync configuration
    * @param {Object} syncConfig - Sync config object
    * @returns {Promise<void>}

@@ -45,11 +45,21 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load data
   await loadData();
 
+  // Check for daily rollover (before sync, so rolled-over tasks get pushed)
+  await checkRollover();
+
   // Setup event listeners
   setupEventListeners();
 
   // Initialize sync
   await initSync();
+
+  // Listen for rollover notifications from background
+  chrome.runtime.onMessage.addListener((message) => {
+    if (message.type === 'rollover-complete') {
+      handleRolloverComplete();
+    }
+  });
 
   // Initial render
   renderTasks();
@@ -445,7 +455,9 @@ async function initSync() {
         if (remoteMd) {
           const remoteTasks = obsidianSync.markdownToTasks(remoteMd);
           obsidianSync.lastSyncedContent = remoteMd;
-          taskManager.loadFromParsedTasks(remoteTasks);
+          const localTasks = taskManager.getAllTasks();
+          const matchedTasks = obsidianSync.matchRemoteToLocal(remoteTasks, localTasks);
+          taskManager.loadFromParsedTasks(matchedTasks);
           await storage.saveTasks(taskManager.getAllTasks());
         } else {
           // Connected but no file yet — push current tasks to create the file
@@ -466,7 +478,9 @@ async function initSync() {
  * @param {Array} remoteTasks - Tasks parsed from remote markdown
  */
 function handleRemoteChange(remoteTasks) {
-  taskManager.loadFromParsedTasks(remoteTasks);
+  const localTasks = taskManager.getAllTasks();
+  const matchedTasks = obsidianSync.matchRemoteToLocal(remoteTasks, localTasks);
+  taskManager.loadFromParsedTasks(matchedTasks);
   renderTasks();
   // Update local cache
   storage.saveTasks(taskManager.getAllTasks());
@@ -572,5 +586,41 @@ async function handleTestConnection() {
   } else {
     connectionStatus.textContent = '连接失败。请确认 Obsidian 正在运行且 Local REST API 插件已启用';
     connectionStatus.className = 'connection-status error';
+  }
+}
+
+// ─── Daily Rollover ───
+
+/**
+ * Request background to check and execute daily rollover
+ */
+async function checkRollover() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'check-rollover' });
+    if (response?.performed) {
+      // Reload tasks from storage (background already wrote them)
+      const tasks = await storage.getAllTasks();
+      taskManager.loadTasks(tasks);
+    }
+  } catch (error) {
+    console.error('Failed to check rollover:', error);
+  }
+}
+
+/**
+ * Handle rollover-complete message from background (midnight trigger)
+ */
+async function handleRolloverComplete() {
+  try {
+    const tasks = await storage.getAllTasks();
+    taskManager.loadTasks(tasks);
+    renderTasks();
+
+    // Push new tasks to Obsidian if connected
+    if (obsidianSync?.connected) {
+      await obsidianSync.syncToRemote(taskManager.getAllTasks());
+    }
+  } catch (error) {
+    console.error('Failed to handle rollover complete:', error);
   }
 }

@@ -11,6 +11,7 @@
 - **点击编辑** - 点击任务内容直接编辑，无需额外按钮
 - **已完成任务** - 自动折叠已完成任务，保持界面整洁
 - **本地存储** - 所有数据存储在本地，快速且私密
+- **Obsidian 同步** - 通过 Local REST API 与 Obsidian vault 双向同步
 
 ## 📦 安装步骤
 
@@ -78,6 +79,7 @@
 ├── sidepanel.js           # UI 控制器
 ├── storage.js             # 存储抽象层
 ├── task-manager.js        # 业务逻辑层
+├── obsidian-sync.js       # Obsidian 同步引擎
 └── icons/                 # 扩展图标
 ```
 
@@ -160,6 +162,35 @@ chrome.storage.local API
 **Token 使用：** 127,461 tokens ($0.84)
 
 **项目状态：** ✅ 生产就绪（Production Ready）
+
+### 2026-02-10 07:30 - Checkpoint #3 (Obsidian Sync + Maintenance)
+
+**自上次 checkpoint 以来完成内容：**
+- ✅ 实现 Obsidian 双向同步（通过 Local REST API 插件）
+  - 新增 `obsidian-sync.js` 引擎：Markdown 序列化/反序列化、轮询检测远程变更
+  - 新增设置面板 UI：API Key 配置、连接测试、启用/禁用同步
+  - 支持 HTTPS（27124 端口）和 HTTP（27123 端口）自动切换
+  - 双向同步：本地编辑推送到 Obsidian，Obsidian 编辑拉取到插件
+  - 防冲突机制：本地编辑期间暂停远程拉取
+- ✅ manifest.json 添加 host_permissions 支持 REST API 访问
+- ✅ 设置面板 CSS 样式与同步状态指示器
+
+**代码质量：** 零 TODO/FIXME，代码整洁，无技术债务
+**Token 使用：** ~368,400 tokens ($8.79)
+
+### 2026-02-11 17:10 - Checkpoint #4 (Clean Markdown for Mobile)
+
+**自上次 checkpoint 以来完成内容：**
+- ✅ 移除 Markdown 内联 HTML 注释元数据（`<!-- id:xxx order:N -->`）
+  - `taskToMarkdown()` 现在输出干净的 `- [ ] [A] 任务内容` 格式
+  - 在 1Writer/手机上编辑更加友好：直接添加 `- [ ] 新任务` 即可
+- ✅ 新增内容匹配机制 `matchRemoteToLocal()`
+  - 通过任务内容文本匹配恢复 ID、createdAt、completedAt
+  - 支持任务完成状态在移动端改变后的匹配
+- ✅ 向后兼容：旧格式文件仍可正确解析，下次同步自动转为新格式
+- ✅ Daily rollover 功能（跨日自动复制未完成任务）
+
+**Token 使用：** ~178,000 tokens ($5.88) | 累计 ~546,400 tokens ($14.67)
 
 ## 🤝 贡献
 

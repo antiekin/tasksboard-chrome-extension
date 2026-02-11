@@ -26,7 +26,8 @@
 ├── sidepanel.js           # UI 控制器，处理所有 DOM 操作和事件
 ├── storage.js             # 存储抽象层，封装 chrome.storage.local API
 ├── task-manager.js        # 业务逻辑层，纯逻辑无 DOM 操作
-└── icons/                 # 扩展图标（待添加）
+├── obsidian-sync.js       # Obsidian 双向同步引擎（Local REST API）
+└── icons/                 # 扩展图标
 ```
 
 ### 架构分层
@@ -36,9 +37,9 @@ UI Layer (sidepanel.js)
     ↓ 用户交互触发事件
 Business Logic (task-manager.js)
     ↓ 处理数据和业务规则
-Storage Layer (storage.js)
-    ↓ 数据持久化
-chrome.storage.local API
+Storage Layer (storage.js)          Sync Layer (obsidian-sync.js)
+    ↓ 数据持久化                        ↓ 双向同步
+chrome.storage.local API            Obsidian Local REST API
 ```
 
 **关键原则：**
@@ -241,12 +242,15 @@ chrome.storage.local API
 |------------|------|---------|--------|------|
 | #1 | 2026-02-07 | Planning | ~55,000 | $0.17 |
 | #1 | 2026-02-07 | Implementation | 72,461 | $0.67 |
-| **Total** | - | **All** | **127,461** | **$0.84** |
+| #2 | 2026-02-07 | Obsidian Sync | ~93,000 | $2.09 |
+| #3 | 2026-02-09~10 | Sync refinement + checkpoint | ~148,000 | $5.86 |
+| #4 | 2026-02-11 | Clean Markdown + mobile | ~178,000 | $5.88 |
+| **Total** | - | **All** | **~546,400** | **$14.67** |
 
 **成本明细：**
-- Input tokens: 89,222 ($0.27)
-- Output tokens: 38,238 ($0.57)
-- 定价：Claude Sonnet 4.5 - Input $3/M, Output $15/M
+- Checkpoint #1: Claude Sonnet 4.5 - Input $3/M, Output $15/M
+- Checkpoint #2-3: Claude Opus 4.6 - Input $15/M, Output $75/M
+- Estimated input/output ratio: 70/30
 
 ## 版本历史
 
@@ -259,7 +263,20 @@ chrome.storage.local API
 - ✅ 本地数据持久化
 - ✅ UI 布局优化（标题、对齐、响应式宽度）
 
+**v1.1.0 (2026-02-09)**
+- ✅ Obsidian 双向同步（Local REST API）
+- ✅ 设置面板 UI（API Key、Vault 路径、连接测试）
+- ✅ 同步状态指示器
+- ✅ Markdown 序列化/反序列化（保留 ID 和 order 元数据）
+- ✅ 防冲突机制（本地编辑优先）
+
+**v1.2.0 (2026-02-11)**
+- ✅ Clean Markdown 格式（移除内联 HTML 注释元数据）
+- ✅ 内容匹配机制（通过文本内容恢复任务 ID）
+- ✅ 移动端友好编辑（1Writer 直接添加 `- [ ] 任务`）
+- ✅ Daily rollover（跨日自动复制未完成任务）
+
 ---
 
-**最后更新：** 2026-02-07
+**最后更新：** 2026-02-11
 **维护者：** Claude AI

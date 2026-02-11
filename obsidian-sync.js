@@ -159,8 +159,7 @@ class ObsidianSync {
   taskToMarkdown(task) {
     const check = task.completed ? 'x' : ' ';
     const priority = task.priority ? `[${task.priority}] ` : '';
-    const completedMeta = task.completedAt ? ` completed:${task.completedAt}` : '';
-    return `- [${check}] ${priority}${task.content}  <!-- id:${task.id} order:${task.order}${completedMeta} -->`;
+    return `- [${check}] ${priority}${task.content}`;
   }
 
   /**
@@ -303,6 +302,54 @@ class ObsidianSync {
     }
 
     return tasks;
+  }
+
+  /**
+   * Match remote tasks (parsed from clean markdown) to local tasks by content
+   * Restores IDs, createdAt, and completedAt from local state
+   * @param {Array} remoteTasks - Tasks parsed from remote markdown
+   * @param {Array} localTasks - All local tasks
+   * @returns {Array} Remote tasks with matched local metadata
+   */
+  matchRemoteToLocal(remoteTasks, localTasks) {
+    const today = this.getTodayDate();
+    const todayLocal = localTasks.filter(t => t.createdAt === today);
+    const localMap = new Map();
+    for (const t of todayLocal) {
+      // Use content+completed as key to avoid active/completed same-name conflicts
+      const key = `${t.content}||${t.completed}`;
+      if (!localMap.has(key)) localMap.set(key, t);
+    }
+
+    const usedIds = new Set();
+
+    return remoteTasks.map(remote => {
+      // Try exact match (content + same completed status)
+      const key = `${remote.content}||${remote.completed}`;
+      const local = localMap.get(key);
+      if (local && !usedIds.has(local.id)) {
+        usedIds.add(local.id);
+        return {
+          ...remote,
+          id: local.id,
+          createdAt: local.createdAt,
+          completedAt: remote.completed ? (local.completedAt || remote.completedAt) : null,
+        };
+      }
+      // Try alternate match (content matches but completed status changed on mobile)
+      const keyAlt = `${remote.content}||${!remote.completed}`;
+      const localAlt = localMap.get(keyAlt);
+      if (localAlt && !usedIds.has(localAlt.id)) {
+        usedIds.add(localAlt.id);
+        return {
+          ...remote,
+          id: localAlt.id,
+          createdAt: localAlt.createdAt,
+          completedAt: remote.completed ? (localAlt.completedAt || remote.completedAt) : null,
+        };
+      }
+      return remote; // New task, keep generated ID
+    });
   }
 
   // ─── Sync Operations ───

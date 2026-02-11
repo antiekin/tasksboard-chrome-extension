@@ -5,7 +5,8 @@
   "description": "本地版 Google Tasks 任务管理插件，快速高效的当日任务管理工具",
   "permissions": [
     "storage",
-    "sidePanel"
+    "sidePanel",
+    "alarms"
   ],
   "host_permissions": [
     "https://127.0.0.1:27124/*",
