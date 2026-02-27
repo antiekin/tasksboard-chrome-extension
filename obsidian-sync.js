@@ -31,16 +31,19 @@ class ObsidianSync {
    * @returns {string} e.g. "0. 目标及计划/Daily/2026-02-09.md"
    */
   getTodayFilePath() {
-    const today = new Date().toISOString().split('T')[0];
-    return `${this.vaultPath}/${today}.md`;
+    return `${this.vaultPath}/${this.getTodayDate()}.md`;
   }
 
   /**
-   * Get today's date string
+   * Get today's date string in local timezone
    * @returns {string} e.g. "2026-02-09"
    */
   getTodayDate() {
-    return new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   /**

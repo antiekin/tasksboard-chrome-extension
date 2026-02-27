@@ -17,12 +17,15 @@ class TaskManager {
   }
 
   /**
-   * Get today's date in ISO format (YYYY-MM-DD)
+   * Get today's date in local timezone (YYYY-MM-DD)
    * @returns {string} Today's date
    */
   getTodayDate() {
     const now = new Date();
-    return now.toISOString().split('T')[0];
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
   }
 
   /**
@@ -171,7 +174,10 @@ class TaskManager {
   cleanupOldTasks() {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-    const cutoffDate = sevenDaysAgo.toISOString().split('T')[0];
+    const year = sevenDaysAgo.getFullYear();
+    const month = String(sevenDaysAgo.getMonth() + 1).padStart(2, '0');
+    const day = String(sevenDaysAgo.getDate()).padStart(2, '0');
+    const cutoffDate = `${year}-${month}-${day}`;
 
     this.tasks = this.tasks.filter(task => {
       if (!task.completed) return true;

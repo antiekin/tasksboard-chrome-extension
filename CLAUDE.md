@@ -246,7 +246,8 @@ chrome.storage.local API            Obsidian Local REST API
 | #3 | 2026-02-09~10 | Sync refinement + checkpoint | ~148,000 | $5.86 |
 | #4 | 2026-02-11 | Clean Markdown + mobile | ~178,000 | $5.88 |
 | #5 | 2026-02-11 | API key security | ~87,000 | $2.87 |
-| **Total** | - | **All** | **~633,400** | **$17.54** |
+| #6 | 2026-02-27 | Timezone fix | ~25,000 | $0.82 |
+| **Total** | - | **All** | **~658,400** | **$18.36** |
 
 **成本明细：**
 - Checkpoint #1: Claude Sonnet 4.5 - Input $3/M, Output $15/M
@@ -277,7 +278,10 @@ chrome.storage.local API            Obsidian Local REST API
 - ✅ 移动端友好编辑（1Writer 直接添加 `- [ ] 任务`）
 - ✅ Daily rollover（跨日自动复制未完成任务）
 
+**v1.2.1 (2026-02-27)**
+- ✅ 修复时区 bug：日期计算从 UTC 改为本地时间
+
 ---
 
-**最后更新：** 2026-02-11
+**最后更新：** 2026-02-27
 **维护者：** Claude AI

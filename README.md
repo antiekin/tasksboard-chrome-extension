@@ -202,6 +202,16 @@ chrome.storage.local API
 
 **Token 使用：** ~87,000 tokens ($2.87) | 累计 ~633,400 tokens ($17.54)
 
+### 2026-02-27 - Checkpoint #6 (Timezone Fix)
+
+**自上次 checkpoint 以来完成内容：**
+- ✅ 修复时区 bug：`getTodayDate()` 从 UTC 改为本地时间
+  - 影响文件：`task-manager.js`、`background.js`、`obsidian-sync.js`
+  - 原因：`toISOString().split('T')[0]` 返回 UTC 日期，北京时间 0:00~8:00 会错误使用前一天日期
+  - 影响范围：任务创建日期、Obsidian 文件名、Daily rollover、旧任务清理
+
+**Token 使用：** ~25,000 tokens ($0.82) | 累计 ~658,400 tokens ($18.36)
+
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
