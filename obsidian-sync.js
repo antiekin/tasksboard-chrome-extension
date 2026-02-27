@@ -28,10 +28,14 @@ class ObsidianSync {
 
   /**
    * Get today's file path within the vault
-   * @returns {string} e.g. "0. 目标及计划/Daily/2026-02-09.md"
+   * @returns {string} e.g. "0. 目标及计划/Daily/20260209_Daily_Tasks.md"
    */
   getTodayFilePath() {
-    return `${this.vaultPath}/${this.getTodayDate()}.md`;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${this.vaultPath}/${year}${month}${day}_Daily_Tasks.md`;
   }
 
   /**

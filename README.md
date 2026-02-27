@@ -212,6 +212,15 @@ chrome.storage.local API
 
 **Token 使用：** ~25,000 tokens ($0.82) | 累计 ~658,400 tokens ($18.36)
 
+### 2026-02-27 - Checkpoint #7 (File Naming + GitHub)
+
+**自上次 checkpoint 以来完成内容：**
+- ✅ Obsidian 同步文件名改为 `YYYYMMDD_Daily_Tasks.md` 格式（去掉 hyphen，添加后缀）
+- ✅ 重命名 Daily 文件夹下 7 个历史文件
+- ✅ 创建 GitHub 仓库并推送：https://github.com/antiekin/tasksboard-chrome-extension
+
+**Token 使用：** ~40,000 tokens ($1.32) | 累计 ~698,400 tokens ($19.68)
+
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
