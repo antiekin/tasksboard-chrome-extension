@@ -12,6 +12,9 @@
 - **已完成任务** - 自动折叠已完成任务，保持界面整洁
 - **本地存储** - 所有数据存储在本地，快速且私密
 - **Obsidian 同步** - 通过 Local REST API 与 Obsidian vault 双向同步
+- **To-do List 标签** - 独立的待办清单，与 Obsidian Markdown 文件双向同步
+- **跨标签移动** - 一键在今日任务和待办清单之间转移任务
+- **分类标签** - 家庭/工作/健康/学习 四类颜色标签
 
 ## 📦 安装步骤
 
@@ -79,7 +82,8 @@
 ├── sidepanel.js           # UI 控制器
 ├── storage.js             # 存储抽象层
 ├── task-manager.js        # 业务逻辑层
-├── obsidian-sync.js       # Obsidian 同步引擎
+├── obsidian-sync.js       # Daily Tasks 同步引擎
+├── todo-sync.js           # To-do List 同步引擎
 └── icons/                 # 扩展图标
 ```
 
@@ -220,6 +224,25 @@ chrome.storage.local API
 - ✅ 创建 GitHub 仓库并推送：https://github.com/antiekin/tasksboard-chrome-extension
 
 **Token 使用：** ~40,000 tokens ($1.32) | 累计 ~698,400 tokens ($19.68)
+
+### 2026-03-11 - Checkpoint #8 (To-do List Tab + Cross-Tab Move + UI Polish)
+
+**自上次 checkpoint 以来完成内容：**
+- ✅ 新增 To-do List 标签页，双向同步 Obsidian 的 `Todo_List.md`
+  - 新增 `todo-sync.js` 引擎：解析/序列化 H2 分段 Markdown，保留 preamble/comment/wikilink
+  - Tab 切换 UI：今日任务 / To-do List
+- ✅ S/A/B/C 优先级支持扩展到 To-do List 项目
+- ✅ 分类标签（家庭/工作/健康/学习）支持两个标签页
+- ✅ 跨标签移动功能
+  - Daily Task → To-do List（默认"短期任务"栏目）
+  - To-do List → Daily Task（一键创建今日任务）
+  - To-do List 内部跨栏目移动（下拉菜单选择目标栏目）
+- ✅ UI 优化
+  - 同步状态指示器移到右上角 header
+  - 来源引用改为 🔗 图标 + hover tooltip
+  - 任务行间距紧凑化
+
+**Token 使用：** ~100,000 tokens ($3.30) | 累计 ~798,400 tokens ($22.98)
 
 ## 🤝 贡献
 

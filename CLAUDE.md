@@ -26,7 +26,8 @@
 ├── sidepanel.js           # UI 控制器，处理所有 DOM 操作和事件
 ├── storage.js             # 存储抽象层，封装 chrome.storage.local API
 ├── task-manager.js        # 业务逻辑层，纯逻辑无 DOM 操作
-├── obsidian-sync.js       # Obsidian 双向同步引擎（Local REST API）
+├── obsidian-sync.js       # Obsidian 双向同步引擎（Daily Tasks）
+├── todo-sync.js           # Obsidian 双向同步引擎（To-do List）
 └── icons/                 # 扩展图标
 ```
 
@@ -59,7 +60,8 @@ chrome.storage.local API            Obsidian Local REST API
   completed: false,               // 完成状态
   order: 0,                       // 排序序号（越小越靠前）
   createdAt: "2026-02-07",        // 创建日期 (ISO YYYY-MM-DD)
-  completedAt: null               // 完成时间 (ISO string or null)
+  completedAt: null,              // 完成时间 (ISO string or null)
+  category: null                  // 分类标签 ("家庭"|"工作"|"健康"|"学习"|null)
 }
 ```
 
@@ -70,6 +72,14 @@ chrome.storage.local API            Obsidian Local REST API
   tasks: [...],                   // 任务数组
   preferences: {                  // 用户偏好
     completedSectionExpanded: false
+  },
+  todoData: {                     // To-do List 数据
+    preamble: "...",              // Markdown 前言（frontmatter + H1）
+    sections: [{                  // H2 分段
+      name: "短期任务",
+      comment: "<!-- ... -->",
+      items: [{ id, text, reference, priority, category, completed, order }]
+    }]
   }
 }
 ```
@@ -248,7 +258,8 @@ chrome.storage.local API            Obsidian Local REST API
 | #5 | 2026-02-11 | API key security | ~87,000 | $2.87 |
 | #6 | 2026-02-27 | Timezone fix | ~25,000 | $0.82 |
 | #7 | 2026-02-27 | File naming + GitHub | ~40,000 | $1.32 |
-| **Total** | - | **All** | **~698,400** | **$19.68** |
+| #8 | 2026-03-11 | Todo tab + cross-move + UI | ~100,000 | $3.30 |
+| **Total** | - | **All** | **~798,400** | **$22.98** |
 
 **成本明细：**
 - Checkpoint #1: Claude Sonnet 4.5 - Input $3/M, Output $15/M
@@ -284,7 +295,13 @@ chrome.storage.local API            Obsidian Local REST API
 - ✅ Obsidian 文件名改为 `YYYYMMDD_Daily_Tasks.md` 格式
 - ✅ 推送到 GitHub 仓库
 
+**v2.0.0 (2026-03-11)**
+- ✅ To-do List 标签页 + 双向同步 Obsidian `Todo_List.md`
+- ✅ S/A/B/C 优先级 + 分类标签（家庭/工作/健康/学习）全面支持
+- ✅ 跨标签移动（Daily ↔ Todo）+ Todo 内跨栏目移动（下拉菜单）
+- ✅ UI 优化：同步指示器移至 header、来源引用改为图标 tooltip、行间距紧凑化
+
 ---
 
-**最后更新：** 2026-02-27
+**最后更新：** 2026-03-11
 **维护者：** Claude AI

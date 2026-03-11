@@ -46,7 +46,8 @@ class TaskManager {
       completed: false,
       order: maxOrder + 1,
       createdAt: this.getTodayDate(),
-      completedAt: null
+      completedAt: null,
+      category: null
     };
 
     this.tasks.push(task);

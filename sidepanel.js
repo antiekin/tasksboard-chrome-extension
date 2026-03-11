@@ -8,7 +8,7 @@ const taskManager = new TaskManager();
 let taskListContainer, completedList, completedSection, completedHeader;
 let addTaskBtn, emptyState, completedCount;
 let settingsBtn, settingsPanel, syncIndicator, syncDot, syncLabel;
-let apiKeyInput, vaultPathInput, syncEnabledInput;
+let apiKeyInput, vaultPathInput, syncEnabledInput, todoFilePathInput;
 let testConnectionBtn, saveSettingsBtn, connectionStatus;
 
 // State
@@ -17,6 +17,37 @@ let saveTimeout = null;
 
 /** @type {ObsidianSync|null} */
 let obsidianSync = null;
+
+/** @type {TodoSync|null} */
+let todoSync = null;
+let todoData = { preamble: '', sections: [] };
+let todoSaveTimeout = null;
+
+// Category definitions
+const CATEGORIES = ['家庭', '工作', '健康', '学习', null];
+
+/**
+ * Create a category tag DOM element
+ * @param {string|null} category - Current category
+ * @param {function} onClick - Click handler
+ * @returns {HTMLElement}
+ */
+function createCategoryTag(category, onClick) {
+  const tag = document.createElement('span');
+  tag.className = 'category-tag';
+  if (category) {
+    tag.classList.add(`category-${category}`);
+    tag.textContent = category;
+  } else {
+    tag.classList.add('category-none');
+    tag.textContent = '\u00B7';
+  }
+  tag.addEventListener('click', (e) => {
+    e.stopPropagation();
+    onClick();
+  });
+  return tag;
+}
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', async () => {
@@ -38,6 +69,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   apiKeyInput = document.getElementById('api-key-input');
   vaultPathInput = document.getElementById('vault-path-input');
   syncEnabledInput = document.getElementById('sync-enabled-input');
+  todoFilePathInput = document.getElementById('todo-file-path-input');
   testConnectionBtn = document.getElementById('test-connection-btn');
   saveSettingsBtn = document.getElementById('save-settings-btn');
   connectionStatus = document.getElementById('connection-status');
@@ -48,10 +80,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Check for daily rollover (before sync, so rolled-over tasks get pushed)
   await checkRollover();
 
-  // Setup event listeners
+  // Setup event listeners and tab switching
   setupEventListeners();
+  setupTabSwitching();
 
-  // Initialize sync
+  // Initialize sync (daily + todo)
   await initSync();
 
   // Listen for rollover notifications from background
@@ -63,6 +96,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Initial render
   renderTasks();
+  renderTodoSections();
 });
 
 /**
@@ -74,6 +108,7 @@ async function loadData() {
     taskManager.loadTasks(tasks);
 
     preferences = await storage.getPreferences();
+    todoData = await storage.getTodoData();
 
     // Apply collapsed state
     if (!preferences.completedSectionExpanded) {
@@ -103,6 +138,22 @@ function setupEventListeners() {
 
   // Test connection
   testConnectionBtn.addEventListener('click', handleTestConnection);
+}
+
+/**
+ * Setup tab switching
+ */
+function setupTabSwitching() {
+  const tabs = document.querySelectorAll('.tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+      document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+    });
+  });
 }
 
 /**
@@ -255,11 +306,26 @@ function createTaskElement(task) {
     handleDeleteTask(task.id);
   });
 
+  // Category tag
+  const categoryTag = createCategoryTag(task.category, () => handleCycleCategory(task.id));
+
+  // Move to todo button
+  const moveBtn = document.createElement('div');
+  moveBtn.className = 'move-btn';
+  moveBtn.textContent = '↩';
+  moveBtn.title = '移到待办清单';
+  moveBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handleMoveToTodo(task.id);
+  });
+
   // Assemble
   taskItem.appendChild(dragHandle);
   taskItem.appendChild(checkbox);
   taskItem.appendChild(priorityBadge);
   taskItem.appendChild(content);
+  taskItem.appendChild(categoryTag);
+  taskItem.appendChild(moveBtn);
   taskItem.appendChild(deleteBtn);
 
   return taskItem;
@@ -361,6 +427,19 @@ function handleCyclePriority(taskId) {
 }
 
 /**
+ * Handle cycle category for daily tasks
+ */
+function handleCycleCategory(taskId) {
+  const task = taskManager.tasks.find(t => t.id === taskId);
+  if (!task) return;
+  const index = CATEGORIES.indexOf(task.category);
+  task.category = CATEGORIES[(index + 1) % CATEGORIES.length];
+  taskManager.lastModifiedAt = Date.now();
+  saveTasksDebounced();
+  renderTasks();
+}
+
+/**
  * Handle content edit
  */
 function handleContentEdit(taskId, newContent) {
@@ -438,6 +517,7 @@ async function initSync() {
     syncEnabledInput.checked = syncConfig.syncEnabled;
     apiKeyInput.value = syncConfig.apiKey;
     vaultPathInput.value = syncConfig.vaultPath;
+    todoFilePathInput.value = syncConfig.todoFilePath || '9. To-do List/Todo_List.md';
 
     if (syncConfig.syncEnabled && syncConfig.apiKey) {
       obsidianSync = new ObsidianSync(syncConfig);
@@ -466,6 +546,9 @@ async function initSync() {
 
         // Start polling for changes
         obsidianSync.startPolling();
+
+        // Init todo sync using the same connection
+        await initTodoSync(syncConfig, obsidianSync.apiUrl);
       }
     }
   } catch (error) {
@@ -522,6 +605,7 @@ async function handleSaveSettings() {
     syncEnabled: syncEnabledInput.checked,
     apiKey: apiKeyInput.value.trim(),
     vaultPath: vaultPathInput.value.trim() || '0. 目标及计划/Daily',
+    todoFilePath: todoFilePathInput.value.trim() || '9. To-do List/Todo_List.md',
     pollInterval: 3000
   };
 
@@ -532,6 +616,10 @@ async function handleSaveSettings() {
     if (obsidianSync) {
       obsidianSync.stopPolling();
       obsidianSync = null;
+    }
+    if (todoSync) {
+      todoSync.stopPolling();
+      todoSync = null;
     }
 
     // Restart sync with new config
@@ -546,6 +634,9 @@ async function handleSaveSettings() {
       if (connected) {
         await obsidianSync.syncToRemote(taskManager.getAllTasks());
         obsidianSync.startPolling();
+
+        // Restart todo sync
+        await initTodoSync(syncConfig, obsidianSync.apiUrl);
       }
     } else {
       syncIndicator.style.display = 'none';
@@ -623,4 +714,585 @@ async function handleRolloverComplete() {
   } catch (error) {
     console.error('Failed to handle rollover complete:', error);
   }
+}
+
+// ─── Todo List Tab ───
+
+/**
+ * Initialize todo sync using an already-connected Obsidian instance
+ * @param {Object} syncConfig - Sync configuration
+ * @param {string} apiUrl - Verified API URL from obsidianSync
+ */
+async function initTodoSync(syncConfig, apiUrl) {
+  try {
+    todoSync = new TodoSync({
+      apiUrl: apiUrl,
+      apiKey: syncConfig.apiKey,
+      todoFilePath: syncConfig.todoFilePath || '9. To-do List/Todo_List.md',
+      pollInterval: syncConfig.pollInterval || 3000
+    });
+
+    todoSync.onRemoteChange = handleTodoRemoteChange;
+    todoSync.connected = true;
+
+    // Initial load from remote
+    const remoteMd = await todoSync.readRemoteFile();
+    if (remoteMd) {
+      const remoteData = todoSync.parseTodoMarkdown(remoteMd);
+      todoSync.lastSyncedContent = remoteMd;
+      todoData = todoSync.matchRemoteToLocal(remoteData, todoData);
+      await storage.saveTodoData(todoData);
+      renderTodoSections();
+    }
+
+    todoSync.startPolling();
+  } catch (error) {
+    console.error('Failed to initialize todo sync:', error);
+  }
+}
+
+/**
+ * Handle remote changes to the todo file
+ * @param {Object} remoteData - Parsed todo data from remote
+ */
+function handleTodoRemoteChange(remoteData) {
+  todoData = todoSync.matchRemoteToLocal(remoteData, todoData);
+  renderTodoSections();
+  storage.saveTodoData(todoData);
+}
+
+/**
+ * Render all todo sections
+ */
+function renderTodoSections() {
+  const container = document.getElementById('todo-sections-container');
+  if (!container) return;
+  container.innerHTML = '';
+
+  if (!todoData.sections || todoData.sections.length === 0) {
+    container.innerHTML = '<div class="todo-empty-hint">尚未加载 To-do List 数据</div>';
+    return;
+  }
+
+  for (const section of todoData.sections) {
+    const sectionEl = createTodoSectionElement(section);
+    container.appendChild(sectionEl);
+  }
+
+  setupTodoDragAndDrop();
+}
+
+/**
+ * Create a todo section DOM element
+ * @param {Object} section - Section object { name, comment, items }
+ * @returns {HTMLElement}
+ */
+function createTodoSectionElement(section) {
+  const sectionEl = document.createElement('div');
+  sectionEl.className = 'todo-section';
+
+  // Header
+  const header = document.createElement('div');
+  header.className = 'todo-section-header';
+
+  const title = document.createElement('span');
+  title.className = 'todo-section-title';
+  title.textContent = section.name;
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'todo-add-btn';
+  addBtn.textContent = '+';
+  addBtn.title = '添加任务';
+  addBtn.addEventListener('click', () => handleTodoAdd(section.name));
+
+  header.appendChild(title);
+  header.appendChild(addBtn);
+  sectionEl.appendChild(header);
+
+  // Items container
+  const itemsContainer = document.createElement('div');
+  itemsContainer.className = 'todo-items-container';
+  itemsContainer.setAttribute('data-section', section.name);
+
+  const sortedItems = [...section.items].sort((a, b) => a.order - b.order);
+  for (const item of sortedItems) {
+    const itemEl = createTodoItemElement(item, section.name);
+    itemsContainer.appendChild(itemEl);
+  }
+
+  sectionEl.appendChild(itemsContainer);
+  return sectionEl;
+}
+
+/**
+ * Create a todo item DOM element
+ * @param {Object} item - Todo item { id, text, reference, completed, order }
+ * @param {string} sectionName - Parent section name
+ * @returns {HTMLElement}
+ */
+function createTodoItemElement(item, sectionName) {
+  const itemEl = document.createElement('div');
+  itemEl.className = 'task-item';
+  if (item.completed) itemEl.classList.add('completed');
+  itemEl.setAttribute('data-todo-id', item.id);
+  itemEl.setAttribute('draggable', !item.completed);
+
+  // Drag handle
+  const dragHandle = document.createElement('div');
+  dragHandle.className = 'drag-handle';
+  dragHandle.textContent = '⋮⋮';
+  if (item.completed) dragHandle.style.visibility = 'hidden';
+
+  // Checkbox
+  const checkbox = document.createElement('div');
+  checkbox.className = 'task-checkbox';
+  if (item.completed) checkbox.classList.add('checked');
+  checkbox.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handleTodoToggle(sectionName, item.id);
+  });
+
+  // Priority badge
+  const priorityBadge = document.createElement('div');
+  priorityBadge.className = 'priority-badge';
+  if (item.priority) {
+    priorityBadge.classList.add(`priority-${item.priority.toLowerCase()}`);
+    priorityBadge.textContent = item.priority;
+  } else {
+    priorityBadge.classList.add('priority-none');
+    priorityBadge.textContent = '—';
+  }
+  if (!item.completed) {
+    priorityBadge.addEventListener('click', (e) => {
+      e.stopPropagation();
+      handleTodoCyclePriority(sectionName, item.id);
+    });
+  }
+
+  // Content
+  const content = document.createElement('div');
+  content.className = 'task-content';
+  content.textContent = item.text;
+  content.setAttribute('contenteditable', !item.completed);
+
+  if (!item.completed) {
+    content.addEventListener('blur', (e) => {
+      handleTodoEdit(sectionName, item.id, e.target.textContent);
+    });
+    content.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.target.blur();
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        e.target.textContent = item.text;
+        e.target.blur();
+      }
+    });
+  }
+
+  // Category tag
+  const categoryTag = createCategoryTag(item.category, () => handleTodoCycleCategory(sectionName, item.id));
+
+  // Move button with dropdown
+  const moveBtn = document.createElement('div');
+  moveBtn.className = 'move-btn';
+  moveBtn.textContent = '↗';
+  moveBtn.title = '移动到…';
+  moveBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    showMoveMenu(moveBtn, sectionName, item.id);
+  });
+
+  // Delete button
+  const deleteBtn = document.createElement('div');
+  deleteBtn.className = 'delete-btn';
+  deleteBtn.textContent = '×';
+  deleteBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    handleTodoDelete(sectionName, item.id);
+  });
+
+  // Assemble
+  itemEl.appendChild(dragHandle);
+  itemEl.appendChild(checkbox);
+  itemEl.appendChild(priorityBadge);
+  itemEl.appendChild(content);
+  itemEl.appendChild(categoryTag);
+
+  // Reference icon with tooltip (if exists)
+  if (item.reference) {
+    const refIcon = document.createElement('span');
+    refIcon.className = 'todo-reference';
+    refIcon.textContent = '🔗';
+
+    const tooltip = document.createElement('span');
+    tooltip.className = 'todo-ref-tooltip';
+    tooltip.textContent = TodoSync.getRefDisplay(item.reference);
+    refIcon.appendChild(tooltip);
+
+    // Position tooltip on hover
+    refIcon.addEventListener('mouseenter', () => {
+      const rect = refIcon.getBoundingClientRect();
+      tooltip.style.top = `${rect.top - 28}px`;
+      tooltip.style.left = `${rect.left}px`;
+    });
+
+    itemEl.appendChild(refIcon);
+  }
+
+  itemEl.appendChild(moveBtn);
+  itemEl.appendChild(deleteBtn);
+
+  return itemEl;
+}
+
+/**
+ * Setup drag and drop for todo items within sections
+ */
+function setupTodoDragAndDrop() {
+  const containers = document.querySelectorAll('.todo-items-container');
+  containers.forEach(container => {
+    const items = container.querySelectorAll('.task-item:not(.completed)');
+    items.forEach(item => {
+      item.addEventListener('dragstart', (e) => {
+        e.target.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+      });
+      item.addEventListener('dragend', (e) => {
+        e.target.classList.remove('dragging');
+        const sectionName = container.getAttribute('data-section');
+        const section = todoData.sections.find(s => s.name === sectionName);
+        if (!section) return;
+
+        const itemEls = container.querySelectorAll('.task-item');
+        itemEls.forEach((el, index) => {
+          const id = el.getAttribute('data-todo-id');
+          const sItem = section.items.find(i => i.id === id);
+          if (sItem) sItem.order = index;
+        });
+
+        saveTodoDebounced();
+      });
+    });
+
+    container.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      const dragging = container.querySelector('.dragging');
+      if (!dragging) return;
+      const afterElement = getTodoDragAfterElement(container, e.clientY);
+      if (afterElement == null) {
+        container.appendChild(dragging);
+      } else {
+        container.insertBefore(dragging, afterElement);
+      }
+    });
+  });
+}
+
+/**
+ * Get the element after which to insert during todo drag
+ * @param {HTMLElement} container
+ * @param {number} y - Mouse Y position
+ * @returns {HTMLElement|undefined}
+ */
+function getTodoDragAfterElement(container, y) {
+  const draggableElements = [...container.querySelectorAll('.task-item:not(.dragging)')];
+  return draggableElements.reduce((closest, child) => {
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height / 2;
+    if (offset < 0 && offset > closest.offset) {
+      return { offset, element: child };
+    }
+    return closest;
+  }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
+
+/**
+ * Handle adding a new todo item to a section
+ * @param {string} sectionName
+ */
+function handleTodoAdd(sectionName) {
+  const section = todoData.sections.find(s => s.name === sectionName);
+  if (!section) return;
+
+  const newItem = {
+    id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+    text: '新任务',
+    reference: null,
+    priority: null,
+    category: null,
+    completed: false,
+    order: section.items.length
+  };
+  section.items.push(newItem);
+  saveTodoDebounced();
+  renderTodoSections();
+
+  // Focus the new item for editing
+  setTimeout(() => {
+    const el = document.querySelector(`[data-todo-id="${newItem.id}"] .task-content`);
+    if (el) {
+      el.focus();
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }
+  }, 100);
+}
+
+/**
+ * Handle toggling a todo item's completed state
+ * @param {string} sectionName
+ * @param {string} itemId
+ */
+function handleTodoToggle(sectionName, itemId) {
+  const section = todoData.sections.find(s => s.name === sectionName);
+  if (!section) return;
+  const item = section.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  item.completed = !item.completed;
+  saveTodoDebounced();
+  renderTodoSections();
+}
+
+/**
+ * Handle editing a todo item's text
+ * @param {string} sectionName
+ * @param {string} itemId
+ * @param {string} newText
+ */
+function handleTodoEdit(sectionName, itemId, newText) {
+  const section = todoData.sections.find(s => s.name === sectionName);
+  if (!section) return;
+  const item = section.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  const trimmed = newText.trim();
+  if (trimmed && trimmed !== item.text) {
+    item.text = trimmed;
+    saveTodoDebounced();
+  }
+  renderTodoSections();
+}
+
+/**
+ * Handle deleting a todo item
+ * @param {string} sectionName
+ * @param {string} itemId
+ */
+function handleTodoDelete(sectionName, itemId) {
+  const section = todoData.sections.find(s => s.name === sectionName);
+  if (!section) return;
+
+  const el = document.querySelector(`[data-todo-id="${itemId}"]`);
+  if (el) {
+    el.classList.add('removing');
+    setTimeout(() => {
+      section.items = section.items.filter(i => i.id !== itemId);
+      saveTodoDebounced();
+      renderTodoSections();
+    }, 250);
+  }
+}
+
+/**
+ * Handle cycling priority for a todo item
+ */
+function handleTodoCyclePriority(sectionName, itemId) {
+  const section = todoData.sections.find(s => s.name === sectionName);
+  if (!section) return;
+  const item = section.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  const priorityLevels = ['S', 'A', 'B', 'C', null];
+  const index = priorityLevels.indexOf(item.priority);
+  item.priority = priorityLevels[(index + 1) % priorityLevels.length];
+  saveTodoDebounced();
+  renderTodoSections();
+}
+
+/**
+ * Handle cycling category for a todo item
+ */
+function handleTodoCycleCategory(sectionName, itemId) {
+  const section = todoData.sections.find(s => s.name === sectionName);
+  if (!section) return;
+  const item = section.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  const index = CATEGORIES.indexOf(item.category);
+  item.category = CATEGORIES[(index + 1) % CATEGORIES.length];
+  saveTodoDebounced();
+  renderTodoSections();
+}
+
+// ─── Cross-Tab Move ───
+
+/**
+ * Close any open move menu
+ */
+function closeMoveMenu() {
+  const existing = document.querySelector('.move-menu');
+  if (existing) existing.remove();
+}
+
+// Close move menu on any outside click
+document.addEventListener('click', closeMoveMenu);
+
+/**
+ * Show a dropdown menu for moving a todo item
+ * @param {HTMLElement} anchor - The button element to position relative to
+ * @param {string} fromSection - Current section name
+ * @param {string} itemId - Todo item ID
+ */
+function showMoveMenu(anchor, fromSection, itemId) {
+  closeMoveMenu();
+
+  const menu = document.createElement('div');
+  menu.className = 'move-menu';
+
+  // Option: move to daily tasks
+  const dailyOption = document.createElement('div');
+  dailyOption.className = 'move-menu-item';
+  dailyOption.textContent = '📌 今日任务';
+  dailyOption.addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeMoveMenu();
+    handleMoveToDaily(fromSection, itemId);
+  });
+  menu.appendChild(dailyOption);
+
+  // Options: move to other todo sections
+  for (const section of todoData.sections) {
+    if (section.name === fromSection) continue;
+    const option = document.createElement('div');
+    option.className = 'move-menu-item';
+    option.textContent = `→ ${section.name}`;
+    option.addEventListener('click', (e) => {
+      e.stopPropagation();
+      closeMoveMenu();
+      handleMoveTodoSection(fromSection, section.name, itemId);
+    });
+    menu.appendChild(option);
+  }
+
+  // Position the menu near the anchor using fixed positioning
+  const rect = anchor.getBoundingClientRect();
+  menu.style.position = 'fixed';
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.style.right = `${window.innerWidth - rect.right}px`;
+  document.body.appendChild(menu);
+}
+
+/**
+ * Move a daily task to the To-do List (default: 短期任务 section)
+ * @param {string} taskId - Daily task ID
+ */
+function handleMoveToTodo(taskId) {
+  const task = taskManager.tasks.find(t => t.id === taskId);
+  if (!task) return;
+
+  // Find target section (短期任务, or first section as fallback)
+  let targetSection = todoData.sections.find(s => s.name === '短期任务');
+  if (!targetSection && todoData.sections.length > 0) {
+    targetSection = todoData.sections[0];
+  }
+  if (!targetSection) return;
+
+  // Create todo item from daily task
+  const newItem = {
+    id: Date.now().toString(36) + Math.random().toString(36).substr(2),
+    text: task.content,
+    reference: null,
+    priority: task.priority,
+    category: task.category,
+    completed: false,
+    order: targetSection.items.length
+  };
+
+  // Add to todo, remove from daily
+  targetSection.items.push(newItem);
+  taskManager.deleteTask(taskId);
+
+  // Save and render both
+  saveTasksDebounced();
+  saveTodoDebounced();
+  renderTasks();
+  renderTodoSections();
+}
+
+/**
+ * Move a todo item to today's Daily Tasks
+ * @param {string} sectionName - Source section name
+ * @param {string} itemId - Todo item ID
+ */
+function handleMoveToDaily(sectionName, itemId) {
+  const section = todoData.sections.find(s => s.name === sectionName);
+  if (!section) return;
+  const item = section.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  // Create daily task from todo item
+  const newTask = taskManager.createTask(item.text, item.priority);
+  newTask.category = item.category;
+
+  // Remove from todo
+  section.items = section.items.filter(i => i.id !== itemId);
+
+  // Save and render both
+  saveTasksDebounced();
+  saveTodoDebounced();
+  renderTasks();
+  renderTodoSections();
+}
+
+/**
+ * Move a todo item from one section to another within the To-do List
+ * @param {string} fromSection - Source section name
+ * @param {string} toSection - Target section name
+ * @param {string} itemId - Todo item ID
+ */
+function handleMoveTodoSection(fromSection, toSection, itemId) {
+  const srcSection = todoData.sections.find(s => s.name === fromSection);
+  const dstSection = todoData.sections.find(s => s.name === toSection);
+  if (!srcSection || !dstSection) return;
+
+  const item = srcSection.items.find(i => i.id === itemId);
+  if (!item) return;
+
+  // Move: remove from source, append to destination
+  srcSection.items = srcSection.items.filter(i => i.id !== itemId);
+  item.order = dstSection.items.length;
+  dstSection.items.push(item);
+
+  saveTodoDebounced();
+  renderTodoSections();
+}
+
+/**
+ * Save todo data with debouncing (300ms)
+ * Also syncs to Obsidian if sync is enabled
+ */
+function saveTodoDebounced() {
+  if (todoSaveTimeout) {
+    clearTimeout(todoSaveTimeout);
+  }
+  if (todoSync) {
+    todoSync.pendingLocalChanges = true;
+  }
+
+  todoSaveTimeout = setTimeout(async () => {
+    try {
+      await storage.saveTodoData(todoData);
+      if (todoSync?.connected) {
+        await todoSync.syncToRemote(todoData);
+      }
+    } catch (error) {
+      console.error('Failed to save todo:', error);
+    }
+  }, 300);
 }

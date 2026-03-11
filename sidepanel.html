@@ -8,10 +8,19 @@
 </head>
 <body>
   <div class="container">
-    <!-- Header -->
+    <!-- Header with Tab Bar -->
     <div class="header">
-      <h1>今日任务</h1>
-      <button id="settings-btn" class="settings-btn" title="同步设置">&#9881;</button>
+      <div class="tab-bar">
+        <button class="tab active" data-tab="daily">今日任务</button>
+        <button class="tab" data-tab="todo">To-do List</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <div id="sync-indicator" class="sync-indicator" style="display:none;" title="Obsidian 同步状态">
+          <span id="sync-dot" class="sync-dot"></span>
+          <span id="sync-label" class="sync-label">离线</span>
+        </div>
+        <button id="settings-btn" class="settings-btn" title="同步设置">&#9881;</button>
+      </div>
     </div>
 
     <!-- Settings Panel (hidden by default) -->
@@ -27,8 +36,12 @@
         <input type="password" id="api-key-input" placeholder="Obsidian Local REST API Key" />
       </div>
       <div class="settings-field">
-        <label for="vault-path-input">Vault 路径</label>
+        <label for="vault-path-input">Daily Tasks 文件夹</label>
         <input type="text" id="vault-path-input" value="0. 目标及计划/Daily" />
+      </div>
+      <div class="settings-field">
+        <label for="todo-file-path-input">To-do List 文件路径</label>
+        <input type="text" id="todo-file-path-input" value="9. To-do List/Todo_List.md" />
       </div>
       <div class="settings-actions">
         <button id="test-connection-btn" class="settings-action-btn">测试连接</button>
@@ -37,42 +50,48 @@
       <div id="connection-status" class="connection-status" style="display:none;"></div>
     </div>
 
-    <!-- Add Task Button -->
-    <button id="add-task-btn" class="add-task-btn">+ Add a task</button>
+    <!-- Daily Tab Content -->
+    <div id="daily-tab" class="tab-content active">
+      <!-- Add Task Button -->
+      <button id="add-task-btn" class="add-task-btn">+ Add a task</button>
 
-    <!-- Active Tasks List -->
-    <div id="task-list-container" class="task-list-container">
-      <!-- Tasks will be rendered here -->
-    </div>
-
-    <!-- Completed Tasks Section -->
-    <div id="completed-section" class="completed-section">
-      <div class="completed-header" id="completed-header">
-        <span class="completed-title">Completed (<span id="completed-count">0</span>)</span>
-        <span class="collapse-icon">▼</span>
+      <!-- Active Tasks List -->
+      <div id="task-list-container" class="task-list-container">
+        <!-- Tasks will be rendered here -->
       </div>
-      <div class="completed-list" id="completed-list">
-        <!-- Completed tasks will be rendered here -->
+
+      <!-- Completed Tasks Section -->
+      <div id="completed-section" class="completed-section">
+        <div class="completed-header" id="completed-header">
+          <span class="completed-title">Completed (<span id="completed-count">0</span>)</span>
+          <span class="collapse-icon">▼</span>
+        </div>
+        <div class="completed-list" id="completed-list">
+          <!-- Completed tasks will be rendered here -->
+        </div>
+      </div>
+
+      <!-- Empty State -->
+      <div id="empty-state" class="empty-state" style="display: none;">
+        <p>暂无任务</p>
+        <p class="empty-hint">点击上方添加第一个任务</p>
       </div>
     </div>
 
-    <!-- Empty State -->
-    <div id="empty-state" class="empty-state" style="display: none;">
-      <p>暂无任务</p>
-      <p class="empty-hint">点击上方添加第一个任务</p>
+    <!-- Todo Tab Content -->
+    <div id="todo-tab" class="tab-content">
+      <div id="todo-sections-container" class="todo-sections-container">
+        <!-- Todo sections will be rendered here -->
+      </div>
     </div>
 
-    <!-- Sync Status Indicator -->
-    <div id="sync-indicator" class="sync-indicator" style="display:none;" title="Obsidian 同步状态">
-      <span id="sync-dot" class="sync-dot"></span>
-      <span id="sync-label" class="sync-label">离线</span>
-    </div>
   </div>
 
   <!-- Scripts -->
   <script src="storage.js"></script>
   <script src="task-manager.js"></script>
   <script src="obsidian-sync.js"></script>
+  <script src="todo-sync.js"></script>
   <script src="sidepanel.js"></script>
 </body>
 </html>

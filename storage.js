@@ -81,6 +81,7 @@ const storage = {
           resolve(result.syncConfig || {
             apiKey: '',
             vaultPath: '0. 目标及计划/Daily',
+            todoFilePath: '9. To-do List/Todo_List.md',
             syncEnabled: false,
             pollInterval: 3000
           });
@@ -130,6 +131,39 @@ const storage = {
   async saveSyncConfig(syncConfig) {
     return new Promise((resolve, reject) => {
       chrome.storage.local.set({ syncConfig }, () => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve();
+        }
+      });
+    });
+  },
+
+  /**
+   * Get todo list data from storage
+   * @returns {Promise<Object>} Todo data with preamble and sections
+   */
+  async getTodoData() {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.get(['todoData'], (result) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve(result.todoData || { preamble: '', sections: [] });
+        }
+      });
+    });
+  },
+
+  /**
+   * Save todo list data to storage
+   * @param {Object} todoData - Todo data with preamble and sections
+   * @returns {Promise<void>}
+   */
+  async saveTodoData(todoData) {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.set({ todoData }, () => {
         if (chrome.runtime.lastError) {
           reject(chrome.runtime.lastError);
         } else {

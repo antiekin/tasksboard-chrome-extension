@@ -166,7 +166,8 @@ class ObsidianSync {
   taskToMarkdown(task) {
     const check = task.completed ? 'x' : ' ';
     const priority = task.priority ? `[${task.priority}] ` : '';
-    return `- [${check}] ${priority}${task.content}`;
+    const category = task.category ? ` #${task.category}` : '';
+    return `- [${check}] ${priority}${task.content}${category}`;
   }
 
   /**
@@ -226,6 +227,7 @@ class ObsidianSync {
       order: parseInt(order, 10),
       createdAt: this.getTodayDate(),
       completedAt: completedAt || null,
+      category: null,
     };
   }
 
@@ -240,17 +242,27 @@ class ObsidianSync {
     const match = line.match(ObsidianSync.BARE_TASK_REGEX);
     if (!match) return null;
 
-    const [, checkbox, priority, content] = match;
+    const [, checkbox, priority, rawContent] = match;
     const completed = checkbox === 'x' || inCompletedSection;
+
+    // Extract optional category tag from end of content
+    let content = rawContent.trim();
+    let category = null;
+    const catMatch = content.match(/^(.+?)\s+#(家庭|工作|健康|学习)$/);
+    if (catMatch) {
+      content = catMatch[1].trim();
+      category = catMatch[2];
+    }
 
     return {
       id: this.generateId(),
-      content: content.trim(),
+      content,
       priority: priority || null,
       completed,
       order: orderCounter,
       createdAt: this.getTodayDate(),
       completedAt: completed ? new Date().toISOString() : null,
+      category,
     };
   }
 
