@@ -170,11 +170,21 @@ class TodoSync {
         let reference = null;
         let category = null;
 
+        // Strip #今日 tag before other extraction
+        let today = false;
+        let work = rawContent;
+        if (/(^|\s)#今日(\s|$)/.test(work)) {
+          today = true;
+          work = work.replace(/\s*#今日(?=\s|$)/g, '').trim();
+        }
+
         // Extract wikilink reference: content ← [[ref]]
-        const refMatch = rawContent.match(/^(.+?)\s+←\s+(\[\[.+?\]\])$/);
+        const refMatch = work.match(/^(.+?)\s+←\s+(\[\[.+?\]\])$/);
         if (refMatch) {
           text = refMatch[1].trim();
           reference = refMatch[2];
+        } else {
+          text = work.trim();
         }
 
         // Extract category tag: content #家庭
@@ -191,7 +201,8 @@ class TodoSync {
           priority: priority || null,
           category,
           completed: checkbox === 'x',
-          order: currentSection.items.length
+          order: currentSection.items.length,
+          today
         });
       }
     }
@@ -220,8 +231,9 @@ class TodoSync {
         const check = item.completed ? 'x' : ' ';
         const pri = item.priority ? `[${item.priority}] ` : '';
         const cat = item.category ? ` #${item.category}` : '';
+        const todayTag = item.today ? ' #今日' : '';
         const ref = item.reference ? ` ← ${item.reference}` : '';
-        result += `- [${check}] ${pri}${item.text}${cat}${ref}\n`;
+        result += `- [${check}] ${pri}${item.text}${cat}${todayTag}${ref}\n`;
       }
 
       result += '\n';
