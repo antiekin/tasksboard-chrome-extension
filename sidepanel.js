@@ -1454,17 +1454,23 @@ let _audioCtx = null;
 function playChime(kind) {
   try {
     _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-    if (_audioCtx.state === 'suspended') _audioCtx.resume();
     const base = kind === 'over' ? 660 : 523;
-    [0, 0.12].forEach((t, i) => {
-      const o = _audioCtx.createOscillator(), g = _audioCtx.createGain();
-      o.type = 'sine'; o.frequency.value = base * (i ? 1.5 : 1);
-      g.gain.setValueAtTime(0.0001, _audioCtx.currentTime + t);
-      g.gain.exponentialRampToValueAtTime(0.18, _audioCtx.currentTime + t + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, _audioCtx.currentTime + t + 0.25);
-      o.connect(g).connect(_audioCtx.destination);
-      o.start(_audioCtx.currentTime + t); o.stop(_audioCtx.currentTime + t + 0.26);
-    });
+    const play = () => {
+      [0, 0.12].forEach((t, i) => {
+        const o = _audioCtx.createOscillator(), g = _audioCtx.createGain();
+        o.type = 'sine'; o.frequency.value = base * (i ? 1.5 : 1);
+        g.gain.setValueAtTime(0.0001, _audioCtx.currentTime + t);
+        g.gain.exponentialRampToValueAtTime(0.18, _audioCtx.currentTime + t + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, _audioCtx.currentTime + t + 0.25);
+        o.connect(g).connect(_audioCtx.destination);
+        o.start(_audioCtx.currentTime + t); o.stop(_audioCtx.currentTime + t + 0.26);
+      });
+    };
+    if (_audioCtx.state === 'suspended') {
+      _audioCtx.resume().then(play).catch(() => {});
+    } else {
+      play();
+    }
   } catch (e) { /* audio failure never blocks completion */ }
 }
 
