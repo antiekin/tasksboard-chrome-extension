@@ -50,3 +50,17 @@ test('allMustDoComplete:无必做时 false', () => {
   d.sections[0].items.forEach(i => i.today = false);
   assert.strictEqual(df.allMustDoComplete(d), false);
 });
+
+test('buildDayRecord 汇总必做与超额', () => {
+  const d = fixture();
+  d.sections[0].items[0].completed = true;       // 必做完成 1
+  const rec = df.buildDayRecord(d, ['回复邮件', '健身']);
+  assert.strictEqual(rec.mustDoTotal, 2);
+  assert.strictEqual(rec.mustDoCompleted, 1);
+  assert.deepStrictEqual(rec.overAchieved, ['回复邮件', '健身']);
+});
+
+test('buildDayRecord 对超额去重', () => {
+  const rec = df.buildDayRecord(fixture(), ['读书', '读书']);
+  assert.deepStrictEqual(rec.overAchieved, ['读书']);
+});

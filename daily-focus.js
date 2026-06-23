@@ -24,6 +24,16 @@ function allMustDoComplete(todoData) {
   return mustDo.length > 0 && mustDo.every(i => i.completed);
 }
 
+function buildDayRecord(todoData, extraCompletions) {
+  const mustDo = getMustDoItems(todoData);
+  const overAchieved = [...new Set(extraCompletions || [])];
+  return {
+    mustDoTotal: mustDo.length,
+    mustDoCompleted: mustDo.filter(i => i.completed).length,
+    overAchieved,
+  };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { MAX_MUST_DO, getMustDoItems, countMustDo, canAddMustDo, allMustDoComplete };
+  module.exports = { MAX_MUST_DO, getMustDoItems, countMustDo, canAddMustDo, allMustDoComplete, buildDayRecord };
 }
