@@ -64,3 +64,42 @@ test('buildDayRecord 对超额去重', () => {
   const rec = df.buildDayRecord(fixture(), ['读书', '读书']);
   assert.deepStrictEqual(rec.overAchieved, ['读书']);
 });
+
+test('addDays 跨月正确', () => {
+  assert.strictEqual(df.addDays('2026-06-30', 1), '2026-07-01');
+  assert.strictEqual(df.addDays('2026-03-01', -1), '2026-02-28');
+});
+
+test('computeStreak 连续达成', () => {
+  const h = {
+    '2026-06-21': { mustDoTotal:1, mustDoCompleted:1, overAchieved:[] },
+    '2026-06-22': { mustDoTotal:2, mustDoCompleted:2, overAchieved:[] },
+    '2026-06-23': { mustDoTotal:2, mustDoCompleted:2, overAchieved:[] },
+  };
+  assert.strictEqual(df.computeStreak(h, '2026-06-23'), 3);
+});
+
+test('computeStreak 今天未达成则从昨天算', () => {
+  const h = {
+    '2026-06-22': { mustDoTotal:2, mustDoCompleted:2, overAchieved:[] },
+    '2026-06-23': { mustDoTotal:2, mustDoCompleted:1, overAchieved:[] },
+  };
+  assert.strictEqual(df.computeStreak(h, '2026-06-23'), 1);
+});
+
+test('computeStreak 断裂', () => {
+  const h = {
+    '2026-06-20': { mustDoTotal:1, mustDoCompleted:1, overAchieved:[] },
+    '2026-06-22': { mustDoTotal:1, mustDoCompleted:1, overAchieved:[] },
+    '2026-06-23': { mustDoTotal:1, mustDoCompleted:1, overAchieved:[] },
+  };
+  assert.strictEqual(df.computeStreak(h, '2026-06-23'), 2);
+});
+
+test('tallyOverAchieved 区间求和', () => {
+  const h = {
+    '2026-06-21': { mustDoTotal:1, mustDoCompleted:1, overAchieved:['x'] },
+    '2026-06-23': { mustDoTotal:1, mustDoCompleted:1, overAchieved:['y','z'] },
+  };
+  assert.strictEqual(df.tallyOverAchieved(h, '2026-06-21', '2026-06-23'), 3);
+});
