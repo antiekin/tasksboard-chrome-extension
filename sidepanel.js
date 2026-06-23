@@ -229,6 +229,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initial render
   renderTodoSections();
   renderToday();
+
+  // Initialise streak mini-display after today is rendered (Task 14)
+  if (typeof refreshStreakMini === 'function') refreshStreakMini();
 });
 
 /**
@@ -1631,4 +1634,111 @@ function showOverAchieveCelebration(text) {
   box.append(icon, title);
   el.appendChild(box);
   setTimeout(() => box.remove(), 4000);
+}
+
+// ─── Task 14: Long-Term Board ───
+
+/**
+ * Return a badge label based on monthly over-achieve count, or null if below threshold.
+ * @param {number} monthly - Number of over-achieved days this month
+ * @returns {string|null}
+ */
+function badgeFor(monthly) {
+  if (monthly >= 20) return '高效达人';   // 高效达人
+  if (monthly >= 10) return '稳步前进';   // 稳步前进
+  return null;
+}
+
+/**
+ * Compute board data by merging a live today record into completion history.
+ * @returns {Promise<{streak:number, weekly:number, monthly:number}>}
+ */
+async function computeBoardData() {
+  const history = await storage.getCompletionHistory();
+  const today = getLocalToday();
+  const live = buildDayRecord(todoData, await storage.getTodayExtra(today));
+  const merged = { ...history, [today]: live };
+  const streak = computeStreak(merged, today);
+  const weekly = tallyOverAchieved(merged, addDays(today, -6), today);
+  const monthStart = today.slice(0, 8) + '01';
+  const monthly = tallyOverAchieved(merged, monthStart, today);
+  return { streak, weekly, monthly };
+}
+
+/**
+ * Refresh the streak mini-display (🔥 N 天) in the today header.
+ * Updates #streak-num if the element exists.
+ */
+async function refreshStreakMini() {
+  const el = document.getElementById('streak-num');
+  if (!el) return;
+  try {
+    const { streak } = await computeBoardData();
+    el.textContent = streak;
+  } catch (e) {
+    console.error('refreshStreakMini failed:', e);
+  }
+}
+
+/**
+ * Render the long-term motivation board into #board.
+ * Shows streak card, weekly/monthly metrics, and optional badge.
+ */
+async function refreshBoard() {
+  const board = document.getElementById('board');
+  if (!board) return;
+  try {
+    const { streak, weekly, monthly } = await computeBoardData();
+
+    // Also update streak mini display
+    const streakNumEl = document.getElementById('streak-num');
+    if (streakNumEl) streakNumEl.textContent = streak;
+
+    board.innerHTML = '';
+
+    // Streak card
+    const sc = document.createElement('div');
+    sc.className = 'streak-card';
+
+    const fire = document.createElement('div');
+    fire.style.fontSize = '26px';
+    fire.textContent = '\u{1F525}';   // 🔥 — 8-hex escape avoids surrogate issues
+
+    const big = document.createElement('div');
+    big.className = 'big';
+    big.textContent = '连续 ' + streak + ' 天达成';   // 连续 N 天达成
+
+    sc.append(fire, big);
+
+    // Metrics row
+    const metrics = document.createElement('div');
+    metrics.className = 'metrics';
+
+    for (const [num, lbl] of [[weekly, '本周超额'], [monthly, '本月超额']]) {
+      // 本周超额, 本月超额
+      const m = document.createElement('div');
+      m.className = 'metric';
+      const nEl = document.createElement('div');
+      nEl.className = 'num';
+      nEl.textContent = num;
+      const lEl = document.createElement('div');
+      lEl.className = 'lbl';
+      lEl.textContent = lbl;
+      m.append(nEl, lEl);
+      metrics.appendChild(m);
+    }
+
+    board.append(sc, metrics);
+
+    // Optional badge
+    const badge = badgeFor(monthly);
+    if (badge) {
+      const b = document.createElement('div');
+      b.className = 'badge';
+      b.textContent = '\u{1F3C5} 本月徽章 · ' + badge;   // 🏅 本月徽章 · …
+      board.appendChild(b);
+    }
+  } catch (e) {
+    console.error('refreshBoard failed:', e);
+  }
 }

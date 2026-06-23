@@ -774,3 +774,13 @@ body {
 .overachieve .icon { font-size:28px; }
 .overachieve .title { font-size:15px; font-weight:600; color:#b06000; margin-top:6px; }
 .celebrate .pool-entry { margin-top:12px; width:100%; }
+
+/* ─── Task 14: Long-Term Board ─── */
+.board { margin-top:14px; }
+.board .streak-card { text-align:center; border:1px solid #e0e0e0; border-radius:12px; padding:14px; }
+.board .streak-card .big { font-size:15px; font-weight:600; margin-top:4px; }
+.board .metrics { display:flex; gap:8px; margin-top:10px; }
+.board .metric { flex:1; background:#f1f3f4; border-radius:8px; padding:10px; text-align:center; }
+.board .metric .num { font-size:22px; font-weight:600; }
+.board .metric .lbl { font-size:11px; color:#5f6368; }
+.board .badge { display:flex; align-items:center; gap:8px; justify-content:center; background:#fef7e0; color:#b06000; border-radius:8px; padding:10px; margin-top:10px; font-size:12px; }
