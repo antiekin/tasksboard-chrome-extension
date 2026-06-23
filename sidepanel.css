@@ -768,4 +768,9 @@ body {
 .celebrate .trophy { font-size:34px; }
 .celebrate .title { font-size:16px; font-weight:600; color:#1e8e3e; margin-top:6px; }
 .celebrate .sub { font-size:13px; color:#1e8e3e; margin-top:2px; }
+
+/* ─── Task 13: Over-Achieve Gold Celebration ─── */
+.overachieve { text-align:center; background:#fef7e0; border-radius:12px; padding:16px; margin-top:12px; }
+.overachieve .icon { font-size:28px; }
+.overachieve .title { font-size:15px; font-weight:600; color:#b06000; margin-top:6px; }
 .celebrate .pool-entry { margin-top:12px; width:100%; }

@@ -1584,3 +1584,51 @@ function showAllDoneCelebration() {
   const boardEl = document.getElementById('board');
   if (boardEl) boardEl.style.display = 'block';
 }
+
+// ─── Task 13: Over-Achieve Gold Celebration ───
+
+/**
+ * Complete a pool (todo) item and trigger over-achieve gold celebration
+ * if all must-do items are already complete and this item is a bonus (non-today).
+ * Wired to pool task-completion in Task 15.
+ * @param {string} id - Todo item id
+ */
+async function completePoolItem(id) {
+  const item = findTodoItem(id);
+  if (!item || item.completed) return;
+  item.completed = true;
+  await saveTodoDebounced();
+  const over = !item.today && allMustDoComplete(todoData);
+  if (over) {
+    await storage.addTodayExtra(getLocalToday(), item.text);
+    triggerCompletionFx(true);
+    showOverAchieveCelebration(item.text);
+  } else {
+    triggerCompletionFx(false);
+  }
+  renderTodoSections();   // pool re-render (existing / Task 15)
+  renderToday();
+  if (typeof refreshBoard === 'function') refreshBoard();
+}
+
+/**
+ * Show a transient gold over-achieve celebration box inside #celebrate.
+ * Auto-removes itself after 4 seconds.
+ * @param {string} text - The task text that was completed
+ */
+function showOverAchieveCelebration(text) {
+  const el = document.getElementById('celebrate');
+  if (!el) return;
+  el.style.display = 'block';
+  const box = document.createElement('div');
+  box.className = 'overachieve';
+  const icon = document.createElement('div');
+  icon.className = 'icon';
+  icon.textContent = '\u{1F947}';   // 🥇 — 8-hex escape avoids surrogate issues
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = '超额 +1 · 超神';   // 超额 +1 · 超神
+  box.append(icon, title);
+  el.appendChild(box);
+  setTimeout(() => box.remove(), 4000);
+}
