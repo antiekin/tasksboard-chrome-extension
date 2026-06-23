@@ -762,3 +762,10 @@ body {
 .mustdo-card.done .check { animation: pop .28s ease; }
 .encourage { text-align:center; font-size:13px; font-weight:600; color:#34a853; padding:6px 0; animation: fadeUp 1.6s ease forwards; }
 @keyframes fadeUp { 0%{opacity:0; transform:translateY(6px);} 20%{opacity:1; transform:none;} 80%{opacity:1;} 100%{opacity:0;} }
+
+/* ─── Task 12: All-Done Celebration ─── */
+.celebrate { text-align:center; background:#e6f4ea; border-radius:12px; padding:20px 16px; margin-top:12px; }
+.celebrate .trophy { font-size:34px; }
+.celebrate .title { font-size:16px; font-weight:600; color:#1e8e3e; margin-top:6px; }
+.celebrate .sub { font-size:13px; color:#1e8e3e; margin-top:2px; }
+.celebrate .pool-entry { margin-top:12px; width:100%; }

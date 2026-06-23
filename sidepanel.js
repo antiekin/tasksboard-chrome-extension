@@ -107,6 +107,12 @@ function renderToday() {
 
   // Streak display — refreshStreakMini defined by Task 11; stub if absent
   if (typeof refreshStreakMini === 'function') refreshStreakMini();
+
+  // Hide celebration and board when not all must-do items are complete
+  if (!allMustDoComplete(todoData)) {
+    document.getElementById('celebrate').style.display = 'none';
+    document.getElementById('board').style.display = 'none';
+  }
 }
 
 /**
@@ -1536,4 +1542,45 @@ function triggerCompletionFx(isOverAchieve) {
   flashEncouragement(pool[(Math.random() * pool.length) | 0]);
   fireConfetti({ gold: isOverAchieve, count: isOverAchieve ? 120 : 70 });
   playChime(isOverAchieve ? 'over' : 'base');
+}
+
+/**
+ * Show the all-done celebration block when every must-do item is complete.
+ * Displays a trophy, titles, and a button to switch to the pool (todo) tab.
+ * Also fires a large confetti burst and reveals the board panel (Task 14).
+ */
+function showAllDoneCelebration() {
+  const el = document.getElementById('celebrate');
+  if (!el) return;
+  el.style.display = 'block';
+  el.innerHTML = '';
+
+  const trophy = document.createElement('div');
+  trophy.className = 'trophy';
+  trophy.textContent = '\u{1F3C6}';   // 🏆 — 8-hex escape avoids surrogate issues
+
+  const title = document.createElement('div');
+  title.className = 'title';
+  title.textContent = '今日必做全部达成';
+
+  const sub = document.createElement('div');
+  sub.className = 'sub';
+  sub.textContent = '今天你赢了';
+
+  const btn = document.createElement('button');
+  btn.className = 'add-task-btn pool-entry';
+  btn.textContent = '还有余力？从任务池捞一个 →';
+  btn.addEventListener('click', () => {
+    const poolTab = document.querySelector('.tab[data-tab="todo"]');
+    if (poolTab) poolTab.click();
+  });
+
+  el.append(trophy, title, sub, btn);
+
+  fireConfetti({ count: 140 });
+
+  // Board panel revealed by Task 14; guard so this task works before Task 14 lands
+  if (typeof refreshBoard === 'function') refreshBoard();
+  const boardEl = document.getElementById('board');
+  if (boardEl) boardEl.style.display = 'block';
 }
