@@ -92,7 +92,7 @@ test('daily-focus 导出 MAX_MUST_DO 常量', () => {
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `node --test tests/`
+Run: `node --test tests/*.test.js`
 Expected: FAIL —— `Cannot find module '../daily-focus.js'`
 
 - [ ] **Step 3: 建 daily-focus.js 骨架 + 给 todo-sync.js 加导出**
@@ -116,7 +116,7 @@ if (typeof module !== 'undefined' && module.exports) {
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `node --test tests/`
+Run: `node --test tests/*.test.js`
 Expected: PASS(2 tests)
 
 - [ ] **Step 5: 提交**
@@ -1339,7 +1339,7 @@ git commit -m "feat: pool — set-as-must-do, temp must-do, low-pressure framing
 
 Run:
 ```bash
-node --test tests/
+node --test tests/*.test.js
 for f in daily-focus.js todo-sync.js obsidian-sync.js storage.js background.js sidepanel.js task-manager.js; do node --check "$f" || echo "FAIL $f"; done
 ```
 Expected: 所有测试 PASS;无语法错误输出。
