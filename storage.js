@@ -171,5 +171,82 @@ const storage = {
         }
       });
     });
+  },
+
+  /**
+   * Get completion history from storage
+   * @returns {Promise<Object>} Completion history object with dates as keys
+   */
+  async getCompletionHistory() {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.get(['completionHistory'], (r) => {
+        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+        else resolve(r.completionHistory || {});
+      });
+    });
+  },
+
+  /**
+   * Save completion record for a specific date
+   * @param {string} dateStr - Date string (YYYY-MM-DD)
+   * @param {Object} record - Completion record object
+   * @returns {Promise<void>}
+   */
+  async saveCompletionDay(dateStr, record) {
+    const history = await this.getCompletionHistory();
+    history[dateStr] = record;
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.set({ completionHistory: history }, () => {
+        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+        else resolve();
+      });
+    });
+  },
+
+  /**
+   * Get today extra items from storage
+   * @param {string} dateStr - Current date string (YYYY-MM-DD)
+   * @returns {Promise<Array>} Array of extra items if date matches, empty array otherwise
+   */
+  async getTodayExtra(dateStr) {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.get(['todayExtra'], (r) => {
+        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+        else {
+          const te = r.todayExtra;
+          resolve(te && te.date === dateStr ? te.items : []);
+        }
+      });
+    });
+  },
+
+  /**
+   * Add an item to today extra list (with deduplication)
+   * @param {string} dateStr - Current date string (YYYY-MM-DD)
+   * @param {string} text - Extra item text
+   * @returns {Promise<void>}
+   */
+  async addTodayExtra(dateStr, text) {
+    const items = await this.getTodayExtra(dateStr);
+    if (!items.includes(text)) items.push(text);
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.set({ todayExtra: { date: dateStr, items } }, () => {
+        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+        else resolve();
+      });
+    });
+  },
+
+  /**
+   * Clear today extra items
+   * @returns {Promise<void>}
+   */
+  async clearTodayExtra() {
+    return new Promise((resolve, reject) => {
+      chrome.storage.local.set({ todayExtra: { date: null, items: [] } }, () => {
+        if (chrome.runtime.lastError) reject(chrome.runtime.lastError);
+        else resolve();
+      });
+    });
   }
 };
