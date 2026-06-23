@@ -274,14 +274,14 @@ function setupEventListeners() {
   // Test connection
   if (testConnectionBtn) testConnectionBtn.addEventListener('click', handleTestConnection);
 
-  // Temporary must-do add button
+  // Temporary must-do add button — prompt for text then addTempMustDo (Task 15)
   const addMustdoBtn = document.getElementById('add-mustdo-btn');
   if (addMustdoBtn) {
     addMustdoBtn.addEventListener('click', () => {
-      // Stub: will be wired fully by Task 15 / future work
-      // For now, just switch to todo tab so user can pick items
-      const todoTab = document.querySelector('.tab[data-tab="todo"]');
-      if (todoTab) todoTab.click();
+      const text = prompt('新增今日必做：');
+      if (text && text.trim()) {
+        addTempMustDo(text);
+      }
     });
   }
 }
@@ -994,13 +994,15 @@ function createTodoItemElement(item, sectionName) {
   dragHandle.textContent = '⋮⋮';
   if (item.completed) dragHandle.style.visibility = 'hidden';
 
-  // Checkbox
+  // Checkbox — pool items use completePoolItem to hook over-achieve path (Task 13/15)
   const checkbox = document.createElement('div');
   checkbox.className = 'task-checkbox';
   if (item.completed) checkbox.classList.add('checked');
   checkbox.addEventListener('click', (e) => {
     e.stopPropagation();
-    handleTodoToggle(sectionName, item.id);
+    if (!item.completed) {
+      completePoolItem(item.id);
+    }
   });
 
   // Priority badge
@@ -1044,6 +1046,19 @@ function createTodoItemElement(item, sectionName) {
 
   // Category tag
   const categoryTag = createCategoryTag(item.category, () => handleTodoCycleCategory(sectionName, item.id));
+
+  // Set-as-must-do button (🎯) — only for incomplete, non-today pool items
+  let mustdoBtn = null;
+  if (!item.completed && !item.today) {
+    mustdoBtn = document.createElement('button');
+    mustdoBtn.className = 'set-mustdo-btn';
+    mustdoBtn.textContent = '\u{1F3AF}';
+    mustdoBtn.title = '设为今日必做';
+    mustdoBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      setMustDo(item.id);
+    });
+  }
 
   // Move button with dropdown
   const moveBtn = document.createElement('div');
@@ -1092,6 +1107,7 @@ function createTodoItemElement(item, sectionName) {
     itemEl.appendChild(refIcon);
   }
 
+  if (mustdoBtn) itemEl.appendChild(mustdoBtn);
   itemEl.appendChild(moveBtn);
   itemEl.appendChild(deleteBtn);
 
@@ -1612,6 +1628,53 @@ async function completePoolItem(id) {
   renderTodoSections();   // pool re-render (existing / Task 15)
   renderToday();
   if (typeof refreshBoard === 'function') refreshBoard();
+}
+
+/**
+ * Mark a pool item as today's must-do (today: true).
+ * Enforces the max-3 cap via canAddMustDo.
+ * @param {string} id - Todo item id
+ */
+async function setMustDo(id) {
+  if (!canAddMustDo(todoData)) {
+    showError('今日必做最多 3 个，先完成或退回一个');
+    return;
+  }
+  const item = findTodoItem(id);
+  if (!item) return;
+  item.today = true;
+  await saveTodoDebounced();
+  renderTodoSections();
+  renderToday();
+}
+
+/**
+ * Create a brand-new must-do item and push it directly into the pool
+ * (短期 section by preference) with today: true.
+ * @param {string} text - Task text
+ */
+async function addTempMustDo(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed) return;
+  if (!canAddMustDo(todoData)) {
+    showError('今日必做最多 3 个，先完成或退回一个');
+    return;
+  }
+  const section = todoData.sections.find(s => s.name.includes('短期')) || todoData.sections[0];
+  if (!section) return;
+  section.items.push({
+    id: 'm' + Date.now().toString(36),
+    text: trimmed,
+    reference: null,
+    priority: null,
+    category: null,
+    completed: false,
+    order: section.items.length,
+    today: true
+  });
+  await saveTodoDebounced();
+  renderTodoSections();
+  renderToday();
 }
 
 /**
