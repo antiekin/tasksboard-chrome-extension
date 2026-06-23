@@ -738,3 +738,21 @@ body {
   background: #f3e8fd;
   color: #7627bb;
 }
+
+/* ─── Today Page (Task 10) ─── */
+
+.today-header { display:flex; justify-content:space-between; align-items:center; margin: 4px 0 12px; }
+.today-progress { font-size: 13px; color: var(--color-text-secondary, #5f6368); }
+.streak-mini { font-size: 13px; font-weight: 600; }
+.must-do-list { display:flex; flex-direction:column; gap: 10px; }
+.mustdo-card { display:flex; align-items:center; gap:12px; padding:16px; border:1px solid #e0e0e0; border-radius:12px; background:#fff; transition: background .25s, border-color .25s; }
+.mustdo-card .check { width:22px; height:22px; border-radius:50%; border:2px solid #bdbdbd; flex-shrink:0; cursor:pointer; transition: transform .2s, background .2s, border-color .2s; display:flex; align-items:center; justify-content:center; }
+.mustdo-card.done { background:#e6f4ea; border-color:#34a853; }
+.mustdo-card.done .check { background:#34a853; border-color:#34a853; }
+.mustdo-card.done .check::after { content:'\2713'; color:#fff; display:flex; align-items:center; justify-content:center; height:100%; font-size:13px; }
+.mustdo-card .text { font-size:15px; line-height:1.4; flex:1; }
+.mustdo-card.done .text { text-decoration: line-through; color:#34a853; }
+.mustdo-card .cat-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.today-empty { text-align:center; color: var(--color-text-secondary,#5f6368); padding: 24px 0; }
+.fx-canvas { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:50; display:none; }
+.container { position: relative; }

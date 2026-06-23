@@ -49,9 +49,124 @@ function createCategoryTag(category, onClick) {
   return tag;
 }
 
+// ─── Today Page Helpers ───
+
+/**
+ * Get today's date as local YYYY-MM-DD string
+ * @returns {string}
+ */
+function getLocalToday() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * Render the Today (必做) page
+ */
+function renderToday() {
+  const listEl = document.getElementById('must-do-list');
+  const emptyEl = document.getElementById('today-empty');
+  if (!listEl || !emptyEl) return;
+
+  const mustDo = getMustDoItems(todoData);   // from daily-focus.js
+  listEl.innerHTML = '';
+  emptyEl.style.display = mustDo.length === 0 ? 'block' : 'none';
+
+  for (const item of mustDo) {
+    const card = document.createElement('div');
+    card.className = 'mustdo-card' + (item.completed ? ' done' : '');
+
+    const check = document.createElement('span');
+    check.className = 'check';
+    check.addEventListener('click', () => completeMustDoItem(item.id));
+
+    const text = document.createElement('span');
+    text.className = 'text';
+    text.textContent = item.text;   // textContent prevents XSS
+
+    card.appendChild(check);
+    card.appendChild(text);
+
+    if (item.category) {
+      const tag = createCategoryTag(item.category, () => {});
+      tag.style.cursor = 'default';
+      card.appendChild(tag);
+    }
+
+    listEl.appendChild(card);
+  }
+
+  const done = mustDo.filter(i => i.completed).length;
+  const mdDoneEl = document.getElementById('md-done');
+  const mdTotalEl = document.getElementById('md-total');
+  if (mdDoneEl) mdDoneEl.textContent = done;
+  if (mdTotalEl) mdTotalEl.textContent = mustDo.length;
+
+  // Streak display — refreshStreakMini defined by Task 11; stub if absent
+  if (typeof refreshStreakMini === 'function') refreshStreakMini();
+}
+
+/**
+ * Find a todo item by id across all sections
+ * @param {string} id
+ * @returns {Object|null}
+ */
+function findTodoItem(id) {
+  for (const s of todoData.sections) {
+    const it = s.items.find(i => i.id === id);
+    if (it) return it;
+  }
+  return null;
+}
+
+/**
+ * Mark a must-do item as completed
+ * @param {string} id - Todo item id
+ */
+async function completeMustDoItem(id) {
+  const item = findTodoItem(id);
+  if (!item || item.completed) return;
+  item.completed = true;
+  saveTodoDebounced();
+  renderToday();
+  // triggerCompletionFx and showAllDoneCelebration defined by Tasks 11/12; stub if absent
+  if (typeof triggerCompletionFx === 'function') triggerCompletionFx(false);
+  if (allMustDoComplete(todoData) && typeof showAllDoneCelebration === 'function') {
+    showAllDoneCelebration();
+  }
+}
+
+/**
+ * Archive the day: save completion record, write Obsidian log, reset today flags
+ * @param {string} dateStr - YYYY-MM-DD date to archive
+ */
+async function handleDailyArchive(dateStr) {
+  try {
+    const extra = await storage.getTodayExtra(dateStr);
+    const mustDo = getMustDoItems(todoData).map(i => ({ text: i.text, completed: i.completed }));
+    const record = buildDayRecord(todoData, extra);
+    await storage.saveCompletionDay(dateStr, record);
+    if (obsidianSync && obsidianSync.connected) {
+      await obsidianSync.writeDailyLog(dateStr, mustDo, record.overAchieved);
+    }
+    // Clear #今日 flags across all sections
+    for (const s of todoData.sections) {
+      for (const it of s.items) it.today = false;
+    }
+    saveTodoDebounced();
+    await storage.clearTodayExtra();
+    renderToday();
+  } catch (error) {
+    console.error('Failed to handle daily archive:', error);
+  }
+}
+
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', async () => {
-  // Get DOM elements
+  // Get DOM elements (non-daily-tab elements may be null after HTML restructure)
   taskListContainer = document.getElementById('task-list-container');
   completedList = document.getElementById('completed-list');
   completedSection = document.getElementById('completed-section');
@@ -77,9 +192,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Load data
   await loadData();
 
-  // Check for daily rollover (before sync, so rolled-over tasks get pushed)
-  await checkRollover();
-
   // Setup event listeners and tab switching
   setupEventListeners();
   setupTabSwitching();
@@ -87,16 +199,30 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Initialize sync (daily + todo)
   await initSync();
 
-  // Listen for rollover notifications from background
+  // Listen for messages from background
   chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === 'rollover-complete') {
-      handleRolloverComplete();
+    if (message.type === 'daily-archive') {
+      handleDailyArchive(message.date).then(() => {
+        storage.setLastRolloverDate(getLocalToday());
+      });
     }
   });
 
+  // Startup catch-up: if sidepanel was closed at midnight, archive the missed day now
+  try {
+    const today = getLocalToday();
+    const last = await storage.getLastRolloverDate();
+    if (last && last !== today) {
+      await handleDailyArchive(last);
+    }
+    await storage.setLastRolloverDate(today);
+  } catch (err) {
+    console.error('Startup catch-up failed:', err);
+  }
+
   // Initial render
-  renderTasks();
   renderTodoSections();
+  renderToday();
 });
 
 /**
@@ -124,20 +250,31 @@ async function loadData() {
  * Setup all event listeners
  */
 function setupEventListeners() {
-  // Add task button
-  addTaskBtn.addEventListener('click', handleAddTask);
+  // Add task button (may be absent after daily-tab restructure)
+  if (addTaskBtn) addTaskBtn.addEventListener('click', handleAddTask);
 
-  // Completed section toggle
-  completedHeader.addEventListener('click', toggleCompletedSection);
+  // Completed section toggle (may be absent after daily-tab restructure)
+  if (completedHeader) completedHeader.addEventListener('click', toggleCompletedSection);
 
   // Settings panel toggle
-  settingsBtn.addEventListener('click', toggleSettingsPanel);
+  if (settingsBtn) settingsBtn.addEventListener('click', toggleSettingsPanel);
 
   // Save settings
-  saveSettingsBtn.addEventListener('click', handleSaveSettings);
+  if (saveSettingsBtn) saveSettingsBtn.addEventListener('click', handleSaveSettings);
 
   // Test connection
-  testConnectionBtn.addEventListener('click', handleTestConnection);
+  if (testConnectionBtn) testConnectionBtn.addEventListener('click', handleTestConnection);
+
+  // Temporary must-do add button
+  const addMustdoBtn = document.getElementById('add-mustdo-btn');
+  if (addMustdoBtn) {
+    addMustdoBtn.addEventListener('click', () => {
+      // Stub: will be wired fully by Task 15 / future work
+      // For now, just switch to todo tab so user can pick items
+      const todoTab = document.querySelector('.tab[data-tab="todo"]');
+      if (todoTab) todoTab.click();
+    });
+  }
 }
 
 /**
@@ -152,6 +289,11 @@ function setupTabSwitching() {
 
       document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
       document.getElementById(`${tab.dataset.tab}-tab`).classList.add('active');
+
+      // Re-render today page whenever user switches to the daily tab
+      if (tab.dataset.tab === 'daily') {
+        renderToday();
+      }
     });
   });
 }
@@ -715,42 +857,6 @@ async function handleTestConnection() {
   }
 }
 
-// ─── Daily Rollover ───
-
-/**
- * Request background to check and execute daily rollover
- */
-async function checkRollover() {
-  try {
-    const response = await chrome.runtime.sendMessage({ type: 'check-rollover' });
-    if (response?.performed) {
-      // Reload tasks from storage (background already wrote them)
-      const tasks = await storage.getAllTasks();
-      taskManager.loadTasks(tasks);
-    }
-  } catch (error) {
-    console.error('Failed to check rollover:', error);
-  }
-}
-
-/**
- * Handle rollover-complete message from background (midnight trigger)
- */
-async function handleRolloverComplete() {
-  try {
-    const tasks = await storage.getAllTasks();
-    taskManager.loadTasks(tasks);
-    renderTasks();
-
-    // Push new tasks to Obsidian if connected
-    if (obsidianSync?.connected) {
-      await obsidianSync.syncToRemote(taskManager.getAllTasks());
-    }
-  } catch (error) {
-    console.error('Failed to handle rollover complete:', error);
-  }
-}
-
 // ─── Todo List Tab ───
 
 /**
@@ -793,6 +899,7 @@ async function initTodoSync(syncConfig, apiUrl) {
 function handleTodoRemoteChange(remoteData) {
   todoData = todoSync.matchRemoteToLocal(remoteData, todoData);
   renderTodoSections();
+  renderToday();
   storage.saveTodoData(todoData);
 }
 
