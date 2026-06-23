@@ -70,6 +70,17 @@ function tallyOverAchieved(history, fromStr, toStr) {
   return total;
 }
 
+function buildDailyLogMarkdown(dateStr, mustDoItems, overAchieved) {
+  const doneCount = mustDoItems.filter(i => i.completed).length;
+  const lines = ['---', `date: ${dateStr}`, 'type: daily-log', '---', `# ${dateStr} 完成日志`, ''];
+  lines.push(`## 今日必做 (${doneCount}/${mustDoItems.length})`);
+  for (const it of mustDoItems) lines.push(`- [${it.completed ? 'x' : ' '}] ${it.text}`);
+  lines.push('');
+  lines.push(`## 超额完成 (${(overAchieved || []).length})`);
+  for (const t of (overAchieved || [])) lines.push(`- [x] ${t}`);
+  return lines.join('\n') + '\n';
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { MAX_MUST_DO, getMustDoItems, countMustDo, canAddMustDo, allMustDoComplete, buildDayRecord, addDays, computeStreak, tallyOverAchieved, isAchieved };
+  module.exports = { MAX_MUST_DO, getMustDoItems, countMustDo, canAddMustDo, allMustDoComplete, buildDayRecord, addDays, computeStreak, tallyOverAchieved, isAchieved, buildDailyLogMarkdown };
 }
