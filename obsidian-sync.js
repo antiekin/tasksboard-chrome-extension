@@ -376,6 +376,34 @@ class ObsidianSync {
   // ─── Sync Operations ───
 
   /**
+   * Write the daily log snapshot for a given date to its Daily_Tasks.md file.
+   * Delegates markdown building to the global buildDailyLogMarkdown (defined in
+   * daily-focus.js, which loads before obsidian-sync.js in sidepanel.html).
+   * @param {string} dateStr - ISO date string, e.g. "2026-06-23"
+   * @param {Array}  mustDoItems   - Array of must-do task objects
+   * @param {Array}  overAchieved  - Array of over-achieved task objects
+   * @returns {Promise<boolean>} true on success, false on network error
+   */
+  async writeDailyLog(dateStr, mustDoItems, overAchieved) {
+    const md = buildDailyLogMarkdown(dateStr, mustDoItems, overAchieved);
+    const [y, m, d] = dateStr.split('-');
+    const filePath = `${this.vaultPath}/${y}${m}${d}_Daily_Tasks.md`;
+    const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+    try {
+      const res = await this.apiRequest('PUT', `/vault/${encodedPath}`, md);
+      if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+      this.setConnected(true);
+      return true;
+    } catch (error) {
+      if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        this.setConnected(false);
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
    * Sync local tasks to remote Obsidian file
    * @param {Array} allTasks - All tasks (including non-today tasks)
    * @returns {Promise<boolean>} Success status
