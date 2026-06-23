@@ -1438,3 +1438,96 @@ function saveTodoDebounced() {
     }
   }, 300);
 }
+
+// ─── Task 11: Completion Feedback ───
+
+const ENCOURAGE = ['漂亮!', '搞定一个 👍', '稳!', '又近一步', '就是这个节奏'];
+const ENCOURAGE_OVER = ['超神! 🔥', '额外拿下一件!', '今天血赚', '余力惊人 ✨'];
+
+let _audioCtx = null;
+
+/**
+ * Play a soft chime sound using Web Audio API.
+ * The completion click is the user gesture that unlocks AudioContext.
+ * @param {'base'|'over'} kind
+ */
+function playChime(kind) {
+  try {
+    _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (_audioCtx.state === 'suspended') _audioCtx.resume();
+    const base = kind === 'over' ? 660 : 523;
+    [0, 0.12].forEach((t, i) => {
+      const o = _audioCtx.createOscillator(), g = _audioCtx.createGain();
+      o.type = 'sine'; o.frequency.value = base * (i ? 1.5 : 1);
+      g.gain.setValueAtTime(0.0001, _audioCtx.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.18, _audioCtx.currentTime + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, _audioCtx.currentTime + t + 0.25);
+      o.connect(g).connect(_audioCtx.destination);
+      o.start(_audioCtx.currentTime + t); o.stop(_audioCtx.currentTime + t + 0.26);
+    });
+  } catch (e) { /* audio failure never blocks completion */ }
+}
+
+/**
+ * Fire confetti particles from upper-center of the fx-canvas overlay.
+ * @param {{ gold?: boolean, count?: number }} [opts]
+ */
+function fireConfetti(opts) {
+  const canvas = document.getElementById('fx-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width; canvas.height = rect.height;
+  canvas.style.display = 'block';
+  const colors = opts && opts.gold
+    ? ['#f9ab00', '#fbc02d', '#ffd54f']
+    : ['#34a853', '#4285f4', '#ea4335', '#fbbc04'];
+  const n = (opts && opts.count) || 80;
+  const parts = Array.from({ length: n }, () => ({
+    x: canvas.width / 2, y: canvas.height * 0.3,
+    vx: (Math.random() - 0.5) * 8, vy: Math.random() * -8 - 3,
+    s: Math.random() * 6 + 4, c: colors[(Math.random() * colors.length) | 0], life: 1
+  }));
+  let raf;
+  (function frame() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let alive = false;
+    for (const p of parts) {
+      p.vy += 0.3; p.x += p.vx; p.y += p.vy; p.life -= 0.012;
+      if (p.life > 0 && p.y < canvas.height) {
+        alive = true;
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.c;
+        ctx.fillRect(p.x, p.y, p.s, p.s);
+      }
+    }
+    ctx.globalAlpha = 1;
+    if (alive) raf = requestAnimationFrame(frame);
+    else { cancelAnimationFrame(raf); canvas.style.display = 'none'; }
+  })();
+}
+
+/**
+ * Show an encouragement message that fades in then out above the must-do list.
+ * @param {string} text
+ */
+function flashEncouragement(text) {
+  const el = document.createElement('div');
+  el.className = 'encourage';
+  el.textContent = text;
+  const list = document.getElementById('must-do-list');
+  if (!list) return;
+  list.parentNode.insertBefore(el, list.nextSibling);
+  setTimeout(() => el.remove(), 1700);
+}
+
+/**
+ * Trigger the full completion feedback suite: encouragement, confetti, chime.
+ * @param {boolean} isOverAchieve - true when completing a bonus (over-achieve) item
+ */
+function triggerCompletionFx(isOverAchieve) {
+  const pool = isOverAchieve ? ENCOURAGE_OVER : ENCOURAGE;
+  flashEncouragement(pool[(Math.random() * pool.length) | 0]);
+  fireConfetti({ gold: isOverAchieve, count: isOverAchieve ? 120 : 70 });
+  playChime(isOverAchieve ? 'over' : 'base');
+}

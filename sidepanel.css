@@ -756,3 +756,9 @@ body {
 .today-empty { text-align:center; color: var(--color-text-secondary,#5f6368); padding: 24px 0; }
 .fx-canvas { position:absolute; inset:0; width:100%; height:100%; pointer-events:none; z-index:50; display:none; }
 .container { position: relative; }
+
+/* ─── Task 11: Completion Feedback ─── */
+@keyframes pop { 0%{transform:scale(1);} 40%{transform:scale(1.35);} 100%{transform:scale(1);} }
+.mustdo-card.done .check { animation: pop .28s ease; }
+.encourage { text-align:center; font-size:13px; font-weight:600; color:#34a853; padding:6px 0; animation: fadeUp 1.6s ease forwards; }
+@keyframes fadeUp { 0%{opacity:0; transform:translateY(6px);} 20%{opacity:1; transform:none;} 80%{opacity:1;} 100%{opacity:0;} }
