@@ -11,8 +11,10 @@ class ObsidianSync {
    */
   constructor(config) {
     this.apiUrl = 'https://127.0.0.1:27124';
-    this.apiKey = config.apiKey || '';
-    this.vaultPath = config.vaultPath || '0. 目标及计划/Daily';
+    // Strip an accidental "Bearer " prefix / surrounding spaces — apiRequest adds
+    // "Bearer " itself, so a pasted "Bearer xxx" would become "Bearer Bearer xxx" → 401.
+    this.apiKey = (config.apiKey || '').trim().replace(/^Bearer\s+/i, '');
+    this.vaultPath = config.vaultPath || '1_memory/tasks';
     this.pollInterval = config.pollInterval || 3000;
 
     this.lastSyncedContent = null;
@@ -461,11 +463,14 @@ class ObsidianSync {
 
   /**
    * Test connection to Obsidian Local REST API
-   * Tries HTTPS first (port 27124), then falls back to HTTP (port 27123)
-   * @returns {Promise<boolean>} True if connection successful
+   * Tries HTTPS first (port 27124), then falls back to HTTP (port 27123).
+   * The root endpoint returns 200 even with a wrong/empty key, so we must read
+   * its `authenticated` field — that is the real API-key check.
+   * @returns {Promise<{ok: boolean, reason: 'connected'|'unauthorized'|'offline'}>}
    */
   async testConnection() {
     const urls = ['https://127.0.0.1:27124', 'http://127.0.0.1:27123'];
+    let reachedServer = false;
 
     for (const url of urls) {
       try {
@@ -473,16 +478,29 @@ class ObsidianSync {
           headers: { 'Authorization': `Bearer ${this.apiKey}` }
         });
         if (response.ok) {
-          this.apiUrl = url;
-          this.setConnected(true);
-          return true;
+          reachedServer = true;
+          // Default to true for older plugin versions that lack the field.
+          let authenticated = true;
+          try {
+            const data = await response.json();
+            if (typeof data.authenticated === 'boolean') {
+              authenticated = data.authenticated;
+            }
+          } catch {
+            // Non-JSON body — fall back to treating reachability as success.
+          }
+          if (authenticated) {
+            this.apiUrl = url;
+            this.setConnected(true);
+            return { ok: true, reason: 'connected' };
+          }
         }
       } catch {
-        // Try next URL
+        // This URL is unreachable — try the next one.
       }
     }
 
     this.setConnected(false);
-    return false;
+    return { ok: false, reason: reachedServer ? 'unauthorized' : 'offline' };
   }
 }

@@ -12,8 +12,9 @@ class TodoSync {
    */
   constructor(config) {
     this.apiUrl = config.apiUrl || 'https://127.0.0.1:27124';
-    this.apiKey = config.apiKey || '';
-    this.filePath = config.todoFilePath || '9. To-do List/Todo_List.md';
+    // Strip an accidental "Bearer " prefix / surrounding spaces (see ObsidianSync).
+    this.apiKey = (config.apiKey || '').trim().replace(/^Bearer\s+/i, '');
+    this.filePath = config.todoFilePath || '1_memory/todo.md';
     this.pollInterval = config.pollInterval || 3000;
 
     this.lastSyncedContent = null;

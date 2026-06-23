@@ -527,9 +527,9 @@ async function initSync() {
       // Show sync indicator
       syncIndicator.style.display = 'flex';
 
-      // Test connection first (determines HTTPS vs HTTP URL)
-      const connected = await obsidianSync.testConnection();
-      if (connected) {
+      // Test connection first (determines HTTPS vs HTTP URL, and validates the key)
+      const result = await obsidianSync.testConnection();
+      if (result.ok) {
         // Try initial sync: load from remote if available
         const remoteMd = await obsidianSync.readRemoteFile();
         if (remoteMd) {
@@ -603,58 +603,90 @@ function toggleSettingsPanel() {
 async function handleSaveSettings() {
   const syncConfig = {
     syncEnabled: syncEnabledInput.checked,
-    apiKey: apiKeyInput.value.trim(),
+    // Strip an accidental "Bearer " prefix so storage keeps a clean key.
+    apiKey: apiKeyInput.value.trim().replace(/^Bearer\s+/i, ''),
     vaultPath: vaultPathInput.value.trim() || '0. 目标及计划/Daily',
     todoFilePath: todoFilePathInput.value.trim() || '9. To-do List/Todo_List.md',
     pollInterval: 3000
   };
 
+  // 1) Persist the config first. This IS the "save"; keep it independent so a
+  //    later sync hiccup never reads as "config not saved".
   try {
     await storage.saveSyncConfig(syncConfig);
+  } catch (error) {
+    console.error('Failed to save sync config:', error);
+    showError('配置保存失败,请重试');
+    return;
+  }
 
-    // Stop existing sync if running
-    if (obsidianSync) {
-      obsidianSync.stopPolling();
-      obsidianSync = null;
-    }
-    if (todoSync) {
-      todoSync.stopPolling();
-      todoSync = null;
-    }
+  // Stop any existing sync before reconfiguring
+  if (obsidianSync) {
+    obsidianSync.stopPolling();
+    obsidianSync = null;
+  }
+  if (todoSync) {
+    todoSync.stopPolling();
+    todoSync = null;
+  }
 
-    // Restart sync with new config
-    if (syncConfig.syncEnabled && syncConfig.apiKey) {
-      obsidianSync = new ObsidianSync(syncConfig);
-      obsidianSync.onRemoteChange = handleRemoteChange;
-      obsidianSync.onConnectionChange = updateSyncIndicator;
-      syncIndicator.style.display = 'flex';
+  // Sync disabled (or no key): config saved, nothing else to do.
+  if (!syncConfig.syncEnabled || !syncConfig.apiKey) {
+    syncIndicator.style.display = 'none';
+    settingsPanel.style.display = 'none';
+    return;
+  }
 
-      // Test connection first, then push current tasks
-      const connected = await obsidianSync.testConnection();
-      if (connected) {
-        await obsidianSync.syncToRemote(taskManager.getAllTasks());
-        obsidianSync.startPolling();
+  // 2) Bring up the connection. Failures here do NOT undo the saved config —
+  //    report the specific reason instead of a generic "save failed".
+  obsidianSync = new ObsidianSync(syncConfig);
+  obsidianSync.onRemoteChange = handleRemoteChange;
+  obsidianSync.onConnectionChange = updateSyncIndicator;
+  syncIndicator.style.display = 'flex';
 
-        // Restart todo sync
-        await initTodoSync(syncConfig, obsidianSync.apiUrl);
-      }
-    } else {
-      syncIndicator.style.display = 'none';
-    }
+  const result = await obsidianSync.testConnection();
+  if (!result.ok) {
+    showError('配置已保存,但同步未连接:' + describeSyncError(result.reason));
+    settingsPanel.style.display = 'none';
+    return;
+  }
 
-    // Close settings panel
+  // 3) Initial push + start polling. Surface the HTTP status if the push fails.
+  try {
+    await obsidianSync.syncToRemote(taskManager.getAllTasks());
+    obsidianSync.startPolling();
+    await initTodoSync(syncConfig, obsidianSync.apiUrl);
     settingsPanel.style.display = 'none';
   } catch (error) {
-    console.error('Failed to save settings:', error);
-    showError('设置保存失败');
+    console.error('Initial sync push failed:', error);
+    showError('配置已保存,但首次同步失败:' + describeSyncError(error));
   }
+}
+
+/**
+ * Turn a sync failure (testConnection reason or thrown error) into a user-facing hint.
+ * @param {string|Error} reasonOrError - 'unauthorized'/'offline' or a thrown Error
+ * @returns {string}
+ */
+function describeSyncError(reasonOrError) {
+  const text = typeof reasonOrError === 'string' ? reasonOrError : (reasonOrError?.message || '');
+  if (reasonOrError === 'unauthorized' || /\b401\b/.test(text)) {
+    return 'API Key 无效(401)。请填入纯 key,不要带 "Bearer " 前缀或多余空格';
+  }
+  if (reasonOrError === 'offline') {
+    return 'Obsidian 未响应。请确认 Obsidian 正在运行,且 Local REST API 插件已启用';
+  }
+  if (/\b404\b/.test(text)) {
+    return '路径不存在(404)。请检查「Daily Tasks 文件夹」是否为正确的 vault 相对路径';
+  }
+  return text || '未知错误';
 }
 
 /**
  * Handle test connection button click
  */
 async function handleTestConnection() {
-  const apiKey = apiKeyInput.value.trim();
+  const apiKey = apiKeyInput.value.trim().replace(/^Bearer\s+/i, '');
   const vaultPath = vaultPathInput.value.trim() || '0. 目标及计划/Daily';
 
   if (!apiKey) {
@@ -669,11 +701,14 @@ async function handleTestConnection() {
   connectionStatus.style.display = 'block';
 
   const testSync = new ObsidianSync({ apiKey, vaultPath });
-  const connected = await testSync.testConnection();
+  const result = await testSync.testConnection();
 
-  if (connected) {
-    connectionStatus.textContent = '连接成功！Obsidian Local REST API 已响应';
+  if (result.ok) {
+    connectionStatus.textContent = '连接成功!API Key 有效,可以保存了';
     connectionStatus.className = 'connection-status success';
+  } else if (result.reason === 'unauthorized') {
+    connectionStatus.textContent = 'API Key 无效(401)。请填入纯 key,不要带 "Bearer " 前缀';
+    connectionStatus.className = 'connection-status error';
   } else {
     connectionStatus.textContent = '连接失败。请确认 Obsidian 正在运行且 Local REST API 插件已启用';
     connectionStatus.className = 'connection-status error';
