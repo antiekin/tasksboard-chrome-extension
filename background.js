@@ -149,7 +149,15 @@ async function executeRollover() {
 // Listen for alarm
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === ALARM_NAME) {
-    executeRollover();
+    const yesterday = (() => {
+      const dt = new Date();
+      dt.setDate(dt.getDate() - 1);
+      const y = dt.getFullYear();
+      const m = String(dt.getMonth() + 1).padStart(2, '0');
+      const d = String(dt.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    })();
+    chrome.runtime.sendMessage({ type: 'daily-archive', date: yesterday }).catch(() => {});
     // Reschedule for next midnight (in case periodInMinutes drifts)
     scheduleMidnightAlarm();
   }
