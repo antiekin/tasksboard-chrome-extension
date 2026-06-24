@@ -4,6 +4,7 @@ import re
 import requests
 
 from config import DEFAULT_SECTION, MAX_TODAY, OBSIDIAN_API_URL, TODO_FILE_PATH, load_keys
+import todo_parser
 
 
 def serialize_task_line(task, today_applied):
@@ -182,3 +183,72 @@ def write_tasks(tasks, reader=read_todo, writer=write_todo):
     lines = [serialize_task_line(t, t["today_applied"]) for t in capped]
     writer(insert_task_lines(md, lines))
     return [{"text": t["text"], "today_applied": t["today_applied"]} for t in capped]
+
+
+def complete_task(match_text, reader=read_todo, writer=write_todo):
+    """Find the first incomplete task whose text == match_text, mark it done, write back.
+
+    Args:
+        match_text: pure task text (no #分类/#今日 tags) to locate
+        reader/writer: overridable for testing
+
+    Returns:
+        str | None: display text of the marked task ("text #分类"), or None if no match
+    """
+    data = todo_parser.parse_todo(reader())
+    target = None
+    for sec in data["sections"]:
+        for item in sec["items"]:
+            if item["text"] == match_text and not item["completed"]:
+                target = item
+                break
+        if target:
+            break
+    if target is None:
+        return None
+    target["completed"] = True
+    writer(todo_parser.serialize_todo(data))
+    cat = f" #{target['category']}" if target.get("category") else ""
+    return f"{target['text']}{cat}"
+
+
+def query_today(reader=read_todo):
+    """Collect all #今日 items across sections with completion state.
+
+    Returns:
+        dict: {"items": [{"text","category","completed"}], "total": int, "done": int}
+    """
+    data = todo_parser.parse_todo(reader())
+    items = []
+    for sec in data["sections"]:
+        for it in sec["items"]:
+            if it["today"]:
+                items.append({"text": it["text"], "category": it["category"],
+                              "completed": it["completed"]})
+    done = sum(1 for i in items if i["completed"])
+    return {"items": items, "total": len(items), "done": done}
+
+
+def query_pool(category=None, section=None, reader=read_todo):
+    """List incomplete pool items, optionally filtered by category and/or section.
+
+    Args:
+        category: one of the four categories, or None for any
+        section: a section name, or None for any
+        reader: overridable for testing
+
+    Returns:
+        list[dict]: [{"text","category","section"}] (both filters None = all incomplete)
+    """
+    data = todo_parser.parse_todo(reader())
+    out = []
+    for sec in data["sections"]:
+        if section and sec["name"] != section:
+            continue
+        for it in sec["items"]:
+            if it["completed"]:
+                continue
+            if category and it["category"] != category:
+                continue
+            out.append({"text": it["text"], "category": it["category"], "section": sec["name"]})
+    return out

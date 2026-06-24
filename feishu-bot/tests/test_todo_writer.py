@@ -74,3 +74,55 @@ def test_write_tasks_caps_today_and_returns_results(monkeypatch):
     assert "- [ ] [A] a #工作 #今日" in written["content"]
     assert "- [ ] b" in written["content"]
     assert "- [ ] b #今日" not in written["content"]
+
+
+# ─── Task 3: complete_task ───
+
+def test_complete_marks_and_returns_display():
+    md = "# T\n## 短期任务（7 天内完成）\n- [ ] 买菜 #家庭\n- [ ] 写方案 #工作 #今日\n"
+    written = {}
+    disp = tw.complete_task("买菜", reader=lambda: md, writer=lambda c: written.update(content=c))
+    assert disp == "买菜 #家庭"
+    assert "- [x] 买菜 #家庭" in written["content"]
+    assert "- [ ] 写方案 #工作 #今日" in written["content"]  # 其他不动
+
+
+def test_complete_no_match_returns_none():
+    md = "# T\n## 短期任务（7 天内完成）\n- [ ] 买菜\n"
+    written = {}
+    disp = tw.complete_task("不存在", reader=lambda: md, writer=lambda c: written.update(content=c))
+    assert disp is None
+    assert "content" not in written  # 没写回
+
+
+def test_complete_skips_already_done():
+    md = "# T\n## 短期任务（7 天内完成）\n- [x] 买菜\n- [ ] 买菜\n"
+    written = {}
+    tw.complete_task("买菜", reader=lambda: md, writer=lambda c: written.update(content=c))
+    # 标记第一条未完成的(第二行)，原本的 [x] 保持，结果两条都是 [x]
+    assert written["content"].count("- [x] 买菜") == 2
+
+
+# ─── Task 4: query_today / query_pool ───
+
+def test_query_today_groups_and_counts():
+    md = ("# T\n## 短期任务（7 天内完成）\n"
+          "- [x] 买菜 #今日\n- [ ] 写方案 #工作 #今日\n- [ ] 非今日任务\n"
+          "## 其他\n- [ ] 看书 #今日\n")
+    q = tw.query_today(reader=lambda: md)
+    assert q["total"] == 3 and q["done"] == 1
+    texts = [i["text"] for i in q["items"]]
+    assert "买菜" in texts and "写方案" in texts and "看书" in texts and "非今日任务" not in texts
+
+
+def test_query_pool_filters_category_and_excludes_done():
+    md = ("# T\n## 短期任务（7 天内完成）\n"
+          "- [ ] 写方案 #工作\n- [x] 已完成的工作 #工作\n- [ ] 买菜 #家庭\n")
+    work = tw.query_pool(category="工作", reader=lambda: md)
+    assert [i["text"] for i in work] == ["写方案"]  # 排除已完成 + 排除非工作
+
+
+def test_query_pool_all_when_no_filter():
+    md = "# T\n## 短期任务（7 天内完成）\n- [ ] a\n- [x] b\n- [ ] c\n"
+    allp = tw.query_pool(reader=lambda: md)
+    assert [i["text"] for i in allp] == ["a", "c"]
