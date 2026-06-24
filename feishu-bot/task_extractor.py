@@ -158,6 +158,6 @@ def extract_tasks(user_text, channels=LLM_CHANNELS, caller=call_channel):
             try:
                 return parse_llm_json(caller(channel, messages))
             except Exception as exc2:
-                errors.append(f"{channel['name']}: {exc2}")
+                errors.append(f"{channel['name']}: {exc} → retry: {exc2}")
                 continue
     raise AllChannelsFailed(" | ".join(errors))

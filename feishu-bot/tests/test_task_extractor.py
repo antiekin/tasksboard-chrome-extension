@@ -33,7 +33,7 @@ class _RateLimit(Exception):
     status_code = 429
 
 
-def test_extract_falls_back_on_429(monkeypatch):
+def test_extract_falls_back_on_429():
     calls = []
 
     def fake_caller(channel, messages):
@@ -47,7 +47,7 @@ def test_extract_falls_back_on_429(monkeypatch):
     assert tasks[0]["text"] == "买菜"
 
 
-def test_extract_retries_once_on_non_429(monkeypatch):
+def test_extract_retries_once_on_non_429():
     calls = []
 
     def fake_caller(channel, messages):
@@ -60,9 +60,23 @@ def test_extract_retries_once_on_non_429(monkeypatch):
     assert calls[:2] == ["openrouter", "openrouter"]
 
 
-def test_extract_all_fail_raises(monkeypatch):
+def test_extract_all_fail_raises():
     def fake_caller(channel, messages):
         raise RuntimeError("down")
 
-    with pytest.raises(te.AllChannelsFailed):
+    with pytest.raises(te.AllChannelsFailed) as exc_info:
         te.extract_tasks("x", caller=fake_caller)
+    assert "openrouter" in str(exc_info.value) and "yunwu" in str(exc_info.value)
+
+
+def test_extract_falls_back_on_malformed_json():
+    calls = []
+    def fake_caller(channel, messages):
+        calls.append(channel["name"])
+        if channel["name"] == "openrouter":
+            return "not json at all"
+        return '{"tasks":[{"text":"买菜","today":false}]}'
+    tasks = te.extract_tasks("买菜", caller=fake_caller)
+    # malformed JSON is non-429 → retry same channel once → then fall back to yunwu
+    assert calls == ["openrouter", "openrouter", "yunwu"]
+    assert tasks[0]["text"] == "买菜"
