@@ -7,7 +7,7 @@ PLIST="$HOME/Library/LaunchAgents/com.feishu-task-bot.runner.plist"
 
 mkdir -p "$DEST"
 rsync -a --exclude venv --exclude '__pycache__' --exclude tests --exclude dedup.db \
-  --exclude '*.log' "$SRC"/ "$DEST"/
+  --exclude '*.log' --exclude deploy "$SRC"/ "$DEST"/
 cp "$SRC/deploy/wrapper.sh" "$DEST/wrapper.sh"
 chmod +x "$DEST/wrapper.sh"
 
