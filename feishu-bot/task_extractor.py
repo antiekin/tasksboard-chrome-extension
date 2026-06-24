@@ -1,4 +1,9 @@
-"""Extract structured tasks from a free-text Feishu message via LLM."""
+"""Extract intent + structured payload from a Feishu message via LLM (v2).
+
+One LLM call classifies the message intent (add/query_today/query_pool/complete)
+and produces the matching payload. The current task list (parsed from todo.md) is
+injected so the model can both judge intent and locate the "complete" target.
+"""
 import json
 import re
 
@@ -7,109 +12,104 @@ from openai import OpenAI
 
 from config import LLM_CHANNELS, VALID_CATEGORIES, VALID_PRIORITIES, load_keys
 
-SYSTEM_PROMPT = """你是任务录入助手。把用户的一条消息拆成结构化任务，只输出 JSON。
-格式：{"tasks":[{"text":"...","priority":null,"category":null,"today":false}]}
+SYSTEM_PROMPT = """你是任务助手。判断用户消息的意图并输出 JSON。
+意图 intent 取值之一：
+- "add"：要新增任务（默认；记一件/几件待办）
+- "query_today"：想看今天的必做
+- "query_pool"：想看任务池/某分类/某栏目的任务
+- "complete"：说某件事做完了/完成了
+
+输出格式：
+{"intent":"...","tasks":[{"text","priority","category","today"}],"pool_filter":{"category":null,"section":null},"complete_match":null}
+
 规则：
-- text：任务核心，去掉口水/语气词。
-- priority：仅 "S"/"A"/"B"/"C"，仅当消息明确表达重要/紧急时给，否则 null。
-- category：仅 "家庭"/"工作"/"健康"/"学习" 之一，仅当明确归属时给，否则 null。禁止输出其他分类。
-- today：消息表达"今天/今日/马上/现在/必须今天"等 → true，否则 false。
-- 一条消息可含多个任务，拆成多个数组元素。
-- 拿不准的字段一律 null/false，不要编造。只输出 JSON，不要解释。"""
+- intent=add：填 tasks。text 去口水；priority 仅 S/A/B/C 否则 null；category 仅 家庭/工作/健康/学习 否则 null；today：消息表达"今天/马上/必须今天"→true。可多任务。
+- intent=query_pool：填 pool_filter。说"工作的任务"→category"工作"；说某栏目名→section；泛指"任务池/还有什么"→都 null。
+- intent=complete：从下方「当前任务」列表里挑最匹配且未完成的一条，把它的纯文本（不含 #分类/#今日）放进 complete_match；没有合理匹配→null。
+- 不相关字段留空/ null。只输出 JSON。"""
 
 
-def build_messages(user_text):
-    """Construct OpenAI-format messages for task extraction.
+def summarize_tasks(parsed):
+    """Compress a parsed todo.md into a compact task-list text for the LLM.
 
     Args:
-        user_text: Raw user message text
+        parsed: output of todo_parser.parse_todo
 
     Returns:
-        list[dict]: Messages with "role" and "content" keys
+        str: one line per task — "[栏目] 文本 #分类 #今日 (未完成)"
     """
-    return [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_text},
-    ]
+    lines = []
+    for sec in parsed.get("sections", []):
+        for it in sec["items"]:
+            tag = " #" + it["category"] if it.get("category") else ""
+            today = " #今日" if it.get("today") else ""
+            done = "已完成" if it["completed"] else "未完成"
+            lines.append(f"[{sec['name']}] {it['text']}{tag}{today} ({done})")
+    return "\n".join(lines)
+
+
+def build_messages(user_text, task_list):
+    """Build OpenAI-format messages, injecting the current task list."""
+    user = user_text
+    if task_list:
+        user = f"{user_text}\n\n当前任务（供判断意图和定位「完成」目标）：\n{task_list}"
+    return [{"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user}]
 
 
 def _strip_fence(raw):
-    """Strip ```json code fence from LLM output.
-
-    Args:
-        raw: Raw string that may contain code fence
-
-    Returns:
-        str: Content inside fence, or raw string if no fence found
-    """
+    """Strip a ```json ... ``` fence if present."""
     m = re.search(r"```(?:json)?\s*(.+?)\s*```", raw, re.DOTALL)
     return m.group(1) if m else raw.strip()
 
 
-def parse_llm_json(raw):
-    """Parse and clean LLM JSON output into task list.
-
-    Strips code fences, validates priority/category against config,
-    drops entries with empty text.
-
-    Args:
-        raw: Raw LLM output (may contain ```json fence)
-
-    Returns:
-        list[dict]: List of tasks with keys: text, priority, category, today
-    """
-    data = json.loads(_strip_fence(raw))
-    cleaned = []
-    for item in data.get("tasks", []):
+def _clean_tasks(items):
+    """Validate/clean add-task items: nullify bad priority/category, drop empty text."""
+    out = []
+    for item in items or []:
         text = (item.get("text") or "").strip()
         if not text:
             continue
-        priority = item.get("priority")
-        if priority not in VALID_PRIORITIES:
-            priority = None
-        category = item.get("category")
-        if category not in VALID_CATEGORIES:
-            category = None
-        cleaned.append({
-            "text": text,
-            "priority": priority,
-            "category": category,
-            "today": bool(item.get("today")),
-        })
-    return cleaned
+        pri = item.get("priority") if item.get("priority") in VALID_PRIORITIES else None
+        cat = item.get("category") if item.get("category") in VALID_CATEGORIES else None
+        out.append({"text": text, "priority": pri, "category": cat, "today": bool(item.get("today"))})
+    return out
+
+
+def parse_llm_json(raw):
+    """Parse LLM output into {intent, tasks, pool_filter, complete_match}.
+
+    Invalid/missing intent defaults to "add". Category in pool_filter is validated
+    against the four allowed categories. complete_match is normalized to None if blank.
+    """
+    data = json.loads(_strip_fence(raw))
+    intent = data.get("intent")
+    if intent not in ("add", "query_today", "query_pool", "complete"):
+        intent = "add"
+    pf = data.get("pool_filter") or {}
+    cat = pf.get("category") if pf.get("category") in VALID_CATEGORIES else None
+    cm = data.get("complete_match")
+    cm = cm.strip() if isinstance(cm, str) and cm.strip() else None
+    return {
+        "intent": intent,
+        "tasks": _clean_tasks(data.get("tasks")),
+        "pool_filter": {"category": cat, "section": pf.get("section") or None},
+        "complete_match": cm,
+    }
 
 
 class AllChannelsFailed(Exception):
-    """Raised when all LLM channels fail to produce a successful task extraction."""
+    """Raised when all LLM channels fail."""
     pass
 
 
 def _is_rate_limit(exc):
-    """Check if exception is a 429 rate limit error.
-
-    Args:
-        exc: Exception to check
-
-    Returns:
-        bool: True if exception has status_code == 429 or "429" in str
-    """
+    """True if the exception looks like a 429 rate limit."""
     return getattr(exc, "status_code", None) == 429 or "429" in str(exc)
 
 
 def call_channel(channel, messages):
-    """Call a single LLM channel via OpenAI-compatible API.
-
-    Args:
-        channel: Channel dict with keys: name, base_url, model, key_name
-        messages: List of message dicts with role and content
-
-    Returns:
-        str: Content text from the LLM response
-
-    Raises:
-        RuntimeError: If response has no choices
-        Exception: If the API call fails
-    """
+    """Call one LLM channel via the OpenAI-compatible API; return content text."""
     keys = load_keys()
     client = OpenAI(
         api_key=keys[channel["key_name"]],
@@ -125,27 +125,16 @@ def call_channel(channel, messages):
     return resp.choices[0].message.content
 
 
-def extract_tasks(user_text, channels=LLM_CHANNELS, caller=call_channel):
-    """Extract structured tasks from user text using LLM with fallback orchestration.
+def extract_message(user_text, task_list, channels=LLM_CHANNELS, caller=call_channel):
+    """Classify intent + extract payload, with channel fallback.
 
-    Strategy:
-    - Try each channel in order
-    - On 429: fast-fail to next channel (no retry)
-    - On non-429 error: retry same channel once
-    - If all channels fail: raise AllChannelsFailed with aggregated errors
-
-    Args:
-        user_text: Raw user input text
-        channels: List of channel dicts (default: LLM_CHANNELS from config)
-        caller: Function to call a channel (default: call_channel)
+    OpenRouter first → Yunwu fallback; 429 fast-fails to next channel, non-429
+    retries the same channel once. Raises AllChannelsFailed if all fail.
 
     Returns:
-        list[dict]: Extracted tasks
-
-    Raises:
-        AllChannelsFailed: If all channels fail
+        dict: {intent, tasks, pool_filter, complete_match}
     """
-    messages = build_messages(user_text)
+    messages = build_messages(user_text, task_list)
     errors = []
     for channel in channels:
         try:
@@ -154,7 +143,6 @@ def extract_tasks(user_text, channels=LLM_CHANNELS, caller=call_channel):
             if _is_rate_limit(exc):
                 errors.append(f"{channel['name']}: 429")
                 continue  # fast-fail to next channel
-            # non-429 → retry same channel once
             try:
                 return parse_llm_json(caller(channel, messages))
             except Exception as exc2:
