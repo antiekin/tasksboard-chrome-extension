@@ -9,7 +9,7 @@ read-modify-write normalizes reference position the same way the extension does.
 import re
 
 _TASK = re.compile(r"^- \[([ x])\]\s+(?:\[([SABC])\]\s+)?(.+)$")
-_REF = re.compile(r"\s+←\s+(\[\[.+?\]\])")  # search anywhere (ref may precede category)
+_REF = re.compile(r"\s*←\s*(\[\[.+?\]\])")  # search anywhere; ← may abut text (e.g. "）←")
 _CAT = re.compile(r"^(.+?)\s+#(家庭|工作|健康|学习)$")
 
 
