@@ -1,8 +1,15 @@
-"""Parse / serialize Obsidian todo.md — ported line-for-line from todo-sync.js."""
+"""Parse / serialize Obsidian todo.md.
+
+Ported from the extension's todo-sync.js, with one robustness fix: the wikilink
+reference is searched anywhere in the task body (hand-written todo.md often has
+"文本 ← [[引用]] #分类" with the reference BEFORE the category), not anchored to
+end-of-line. Serialization follows toMarkdown's order (reference last), so a
+read-modify-write normalizes reference position the same way the extension does.
+"""
 import re
 
 _TASK = re.compile(r"^- \[([ x])\]\s+(?:\[([SABC])\]\s+)?(.+)$")
-_REF = re.compile(r"^(.+?)\s+←\s+(\[\[.+?\]\])$")
+_REF = re.compile(r"\s+←\s+(\[\[.+?\]\])")  # search anywhere (ref may precede category)
 _CAT = re.compile(r"^(.+?)\s+#(家庭|工作|健康|学习)$")
 
 
@@ -39,12 +46,13 @@ def parse_todo(markdown):
         if re.search(r"(^|\s)#今日(\s|$)", work):
             today = True
             work = re.sub(r"\s*#今日(?=\s|$)", "", work).strip()
+        # reference may appear before OR after the category tag — search, don't anchor
         reference = None
-        rm = _REF.match(work)
+        rm = _REF.search(work)
         if rm:
-            text, reference = rm.group(1).strip(), rm.group(2)
-        else:
-            text = work.strip()
+            reference = rm.group(1)
+            work = (work[:rm.start()] + work[rm.end():]).strip()
+        text = work.strip()
         category = None
         cm = _CAT.match(text)
         if cm:

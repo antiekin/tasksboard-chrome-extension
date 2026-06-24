@@ -34,3 +34,20 @@ def test_serialize_line_format():
     assert "- [ ] [A] 写方案 #工作 #今日" in out
     assert "- [x] 买菜 #今日" in out
     assert "- [ ] 看书 ← [[20260101_笔记]]" in out
+
+
+def test_parse_ref_before_category():
+    # hand-written todo.md style: reference BEFORE the category tag
+    md = "## S\n- [ ] [A] 伴读书童 ← [[20260304_笔记|DD]] #工作\n"
+    it = tp.parse_todo(md)["sections"][0]["items"][0]
+    assert it["text"] == "伴读书童"          # clean text, no ← [[..]] leftover
+    assert it["category"] == "工作"
+    assert it["reference"] == "[[20260304_笔记|DD]]"
+    assert it["priority"] == "A"
+
+
+def test_ref_before_category_roundtrip_idempotent():
+    md = "## S\n- [ ] 伴读书童 ← [[ref|DD]] #工作\n"
+    once = tp.parse_todo(md)
+    twice = tp.parse_todo(tp.serialize_todo(once))
+    assert once["sections"] == twice["sections"]  # structural idempotence holds
