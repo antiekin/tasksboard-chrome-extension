@@ -999,18 +999,11 @@ function showMoveMenu(anchor, fromSection, itemId) {
   const menu = document.createElement('div');
   menu.className = 'move-menu';
 
-  // Option: move to daily tasks
-  const dailyOption = document.createElement('div');
-  dailyOption.className = 'move-menu-item';
-  dailyOption.textContent = '📌 今日任务';
-  dailyOption.addEventListener('click', (e) => {
-    e.stopPropagation();
-    closeMoveMenu();
-    handleMoveToDaily(fromSection, itemId);
-  });
-  menu.appendChild(dailyOption);
-
-  // Options: move to other todo sections
+  // Options: move to other todo sections.
+  // (Setting an item as a today must-do is done via the 🎯 button, which tags
+  //  it #今日 and keeps it in the pool — NOT a move. The old "move to daily"
+  //  option was removed: it relocated items into the retired daily-list store
+  //  that the today page no longer renders, making them vanish from both views.)
   for (const section of todoData.sections) {
     if (section.name === fromSection) continue;
     const option = document.createElement('div');
@@ -1030,68 +1023,6 @@ function showMoveMenu(anchor, fromSection, itemId) {
   menu.style.top = `${rect.bottom + 4}px`;
   menu.style.right = `${window.innerWidth - rect.right}px`;
   document.body.appendChild(menu);
-}
-
-/**
- * Move a daily task to the To-do List (default: 短期任务 section)
- * @param {string} taskId - Daily task ID
- */
-function handleMoveToTodo(taskId) {
-  const task = taskManager.tasks.find(t => t.id === taskId);
-  if (!task) return;
-
-  // Find target section (短期任务, or first section as fallback)
-  let targetSection = todoData.sections.find(s => s.name === '短期任务');
-  if (!targetSection && todoData.sections.length > 0) {
-    targetSection = todoData.sections[0];
-  }
-  if (!targetSection) return;
-
-  // Create todo item from daily task
-  const newItem = {
-    id: Date.now().toString(36) + Math.random().toString(36).substr(2),
-    text: task.content,
-    reference: null,
-    priority: task.priority,
-    category: task.category,
-    completed: false,
-    order: targetSection.items.length
-  };
-
-  // Add to todo, remove from daily
-  targetSection.items.push(newItem);
-  taskManager.deleteTask(taskId);
-
-  // Save and render both
-  saveTasksDebounced();
-  saveTodoDebounced();
-  renderToday();
-  renderTodoSections();
-}
-
-/**
- * Move a todo item to today's Daily Tasks
- * @param {string} sectionName - Source section name
- * @param {string} itemId - Todo item ID
- */
-function handleMoveToDaily(sectionName, itemId) {
-  const section = todoData.sections.find(s => s.name === sectionName);
-  if (!section) return;
-  const item = section.items.find(i => i.id === itemId);
-  if (!item) return;
-
-  // Create daily task from todo item
-  const newTask = taskManager.createTask(item.text, item.priority);
-  newTask.category = item.category;
-
-  // Remove from todo
-  section.items = section.items.filter(i => i.id !== itemId);
-
-  // Save and render both
-  saveTasksDebounced();
-  saveTodoDebounced();
-  renderToday();
-  renderTodoSections();
 }
 
 /**
