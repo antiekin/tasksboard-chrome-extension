@@ -267,7 +267,10 @@ chrome.storage.local API              Obsidian Local REST API
 | #6 | 2026-02-27 | Timezone fix | ~25,000 | $0.82 |
 | #7 | 2026-02-27 | File naming + GitHub | ~40,000 | $1.32 |
 | #8 | 2026-03-11 | Todo tab + cross-move + UI | ~100,000 | $3.30 |
-| **Total** | - | **All** | **~798,400** | **$22.98** |
+| #9 | 2026-06-24 | 同步修复 + v3.0.0 SDD + 实战 bug | 264.5M † | $704.48 |
+| **Total** | - | **All** | **~265.3M** | **$727.46** |
+
+† #9 为实测自 transcript（含 cache 读 251.8M，跨 579 轮 assistant 消息），故远大于前 8 行；#1–#8 为粗估且未计 cache，口径不同不可直接横比。input+output 仅 1.73M。另有 ~40 次 subagent 派发约 2.6M tokens（多为 haiku/sonnet，单独计费）。
 
 **成本明细：**
 - Checkpoint #1: Claude Sonnet 4.5 - Input $3/M, Output $15/M
@@ -319,6 +322,16 @@ chrome.storage.local API              Obsidian Local REST API
 - ✅ **daily-focus.js**：纯函数逻辑，Node.js 可直接 require 测试
 - ✅ **单元测试**：`tests/` 目录，21 个测试 100% pass（daily-focus + todo-sync + smoke）
 - ✅ **清理旧路径**：移除旧 renderTasks/createTaskElement 等死代码；getActiveTasks/getCompletedTasks 从 task-manager.js 移除
+
+**v3.0.1 (2026-06-24)**
+- ✅ **Obsidian 同步连接修复**：API Key 自动剥离 `Bearer ` 前缀（曾致 401）；「测试连接」改读 `GET /` 的 `authenticated` 字段真正校验 key；保存配置与首次推送解耦、错误提示具体化（401/404/离线）
+- ✅ **跨日归档健壮性**（opus 终审发现）：`handleDailyArchive` 幂等化（防重入/多窗口用空记录覆盖 → streak 损坏）；清 `#今日` 标记改为 `await saveTodoData` 同步持久化（防午夜面板销毁丢失）
+- ✅ **修复任务池→今日数据丢失 bug**：移除移动菜单「📌 今日任务」死路径（经 `handleMoveToDaily` 把任务塞进废弃的 `taskManager.tasks` 黑洞并从池删除，两边消失）；删除死函数 `handleMoveToDaily` / `handleMoveToTodo`；今日入口统一为 🎯 `setMustDo`
+
+### 本次关键教训（详见全局 CLAUDE.md）
+- `node --test tests/`（目录模式）在 node v22 把目录当模块加载而失败 → 用 glob `node --test tests/*.test.js`
+- JS 正则 `\b` 词边界对 CJK 字符无效（`#今日\b` 永不匹配）→ 用 lookahead `(?=\s|$)`
+- 重构淘汰旧数据模型时，残留的旧入口可能把数据移进“不再渲染的存储”形成黑洞 → 删模型务必连同所有入口；纯 UI 路径的 bug 靠 diff/逻辑 review 抓不到，必须真跑扩展
 
 ---
 
