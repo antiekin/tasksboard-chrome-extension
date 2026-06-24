@@ -2,7 +2,10 @@
 import json
 import re
 
-from config import VALID_CATEGORIES, VALID_PRIORITIES
+import httpx
+from openai import OpenAI
+
+from config import LLM_CHANNELS, VALID_CATEGORIES, VALID_PRIORITIES, load_keys
 
 SYSTEM_PROMPT = """你是任务录入助手。把用户的一条消息拆成结构化任务，只输出 JSON。
 格式：{"tasks":[{"text":"...","priority":null,"category":null,"today":false}]}
@@ -74,3 +77,87 @@ def parse_llm_json(raw):
             "today": bool(item.get("today")),
         })
     return cleaned
+
+
+class AllChannelsFailed(Exception):
+    """Raised when all LLM channels fail to produce a successful task extraction."""
+    pass
+
+
+def _is_rate_limit(exc):
+    """Check if exception is a 429 rate limit error.
+
+    Args:
+        exc: Exception to check
+
+    Returns:
+        bool: True if exception has status_code == 429 or "429" in str
+    """
+    return getattr(exc, "status_code", None) == 429 or "429" in str(exc)
+
+
+def call_channel(channel, messages):
+    """Call a single LLM channel via OpenAI-compatible API.
+
+    Args:
+        channel: Channel dict with keys: name, base_url, model, key_name
+        messages: List of message dicts with role and content
+
+    Returns:
+        str: Content text from the LLM response
+
+    Raises:
+        RuntimeError: If response has no choices
+        Exception: If the API call fails
+    """
+    keys = load_keys()
+    client = OpenAI(
+        api_key=keys[channel["key_name"]],
+        base_url=channel["base_url"],
+        http_client=httpx.Client(trust_env=False, timeout=httpx.Timeout(60, connect=15)),
+        max_retries=0,
+    )
+    resp = client.chat.completions.create(
+        model=channel["model"], messages=messages, max_tokens=2048, temperature=0,
+    )
+    if not resp.choices:
+        raise RuntimeError("empty choices")
+    return resp.choices[0].message.content
+
+
+def extract_tasks(user_text, channels=LLM_CHANNELS, caller=call_channel):
+    """Extract structured tasks from user text using LLM with fallback orchestration.
+
+    Strategy:
+    - Try each channel in order
+    - On 429: fast-fail to next channel (no retry)
+    - On non-429 error: retry same channel once
+    - If all channels fail: raise AllChannelsFailed with aggregated errors
+
+    Args:
+        user_text: Raw user input text
+        channels: List of channel dicts (default: LLM_CHANNELS from config)
+        caller: Function to call a channel (default: call_channel)
+
+    Returns:
+        list[dict]: Extracted tasks
+
+    Raises:
+        AllChannelsFailed: If all channels fail
+    """
+    messages = build_messages(user_text)
+    errors = []
+    for channel in channels:
+        try:
+            return parse_llm_json(caller(channel, messages))
+        except Exception as exc:
+            if _is_rate_limit(exc):
+                errors.append(f"{channel['name']}: 429")
+                continue  # fast-fail to next channel
+            # non-429 → retry same channel once
+            try:
+                return parse_llm_json(caller(channel, messages))
+            except Exception as exc2:
+                errors.append(f"{channel['name']}: {exc2}")
+                continue
+    raise AllChannelsFailed(" | ".join(errors))

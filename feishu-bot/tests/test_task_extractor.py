@@ -1,3 +1,4 @@
+import pytest
 import task_extractor as te
 
 
@@ -26,3 +27,42 @@ def test_parse_drops_empty_text():
     tasks = te.parse_llm_json(raw)
     assert len(tasks) == 1
     assert tasks[0]["text"] == "买奶"
+
+
+class _RateLimit(Exception):
+    status_code = 429
+
+
+def test_extract_falls_back_on_429(monkeypatch):
+    calls = []
+
+    def fake_caller(channel, messages):
+        calls.append(channel["name"])
+        if channel["name"] == "openrouter":
+            raise _RateLimit()
+        return '{"tasks":[{"text":"买菜","today":false}]}'
+
+    tasks = te.extract_tasks("买菜", caller=fake_caller)
+    assert calls == ["openrouter", "yunwu"]  # 429 → immediate next channel
+    assert tasks[0]["text"] == "买菜"
+
+
+def test_extract_retries_once_on_non_429(monkeypatch):
+    calls = []
+
+    def fake_caller(channel, messages):
+        calls.append(channel["name"])
+        if len([c for c in calls if c == "openrouter"]) == 1:
+            raise RuntimeError("timeout")  # non-429 → retry same channel
+        return '{"tasks":[{"text":"x","today":false}]}'
+
+    tasks = te.extract_tasks("x", caller=fake_caller)
+    assert calls[:2] == ["openrouter", "openrouter"]
+
+
+def test_extract_all_fail_raises(monkeypatch):
+    def fake_caller(channel, messages):
+        raise RuntimeError("down")
+
+    with pytest.raises(te.AllChannelsFailed):
+        te.extract_tasks("x", caller=fake_caller)
