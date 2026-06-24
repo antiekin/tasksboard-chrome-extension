@@ -118,7 +118,7 @@ def _headers(content_type=None):
         dict: headers with Bearer token from config
     """
     keys = load_keys()
-    h = {"Authorization": f"Bearer {keys['OBSIDIAN_REST_KEY']}"}
+    h = {"Authorization": f"Bearer {keys['DIBRAIN_OBSIDIAN_REST_API_KEY']}"}
     if content_type:
         h["Content-Type"] = content_type
     return h
