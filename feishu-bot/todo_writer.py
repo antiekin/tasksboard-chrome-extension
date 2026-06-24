@@ -20,6 +20,7 @@ def serialize_task_line(task, today_applied):
     pri = f"[{task['priority']}] " if task.get("priority") else ""
     cat = f" #{task['category']}" if task.get("category") else ""
     today = " #今日" if today_applied else ""
+    # NOTE: new tasks carry no reference/wikilink; that field is intentionally not serialized
     return f"- [ ] {pri}{task['text']}{cat}{today}"
 
 

@@ -1,4 +1,5 @@
 """Tests for todo_writer.py — serialize, count, cap, insert functions."""
+import pytest
 import todo_writer as tw
 
 
@@ -33,3 +34,21 @@ def test_insert_into_section_end():
     lines = out.split("\n")
     assert lines.index("- [ ] new") > lines.index("- [ ] old")
     assert lines.index("- [ ] new") < lines.index("## 其他")
+
+
+def test_insert_section_not_found():
+    with pytest.raises(ValueError, match="section not found"):
+        tw.insert_task_lines("## 其他\n- [ ] z\n", ["- [ ] new"], "不存在的分区")
+
+
+def test_insert_at_eof_section():
+    md = "# T\n## 短期任务（7 天内完成）\n- [ ] old\n"
+    out = tw.insert_task_lines(md, ["- [ ] new"], "短期任务（7 天内完成）")
+    lines = out.split("\n")
+    assert lines.index("- [ ] new") > lines.index("- [ ] old")
+
+
+def test_count_active_today_boundary():
+    # "#今日今天" must NOT count — no whitespace boundary after 日
+    md = "## S\n- [ ] a #今日今天\n- [ ] b #今日\n"
+    assert tw.count_active_today(md) == 1
