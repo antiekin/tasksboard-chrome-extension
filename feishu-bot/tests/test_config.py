@@ -17,3 +17,6 @@ def test_constants_present():
     assert config.LLM_CHANNELS[0]["name"] == "openrouter"
     assert config.LLM_CHANNELS[0]["model"] == "anthropic/claude-sonnet-4-6"
     assert config.LLM_CHANNELS[1]["name"] == "yunwu"
+    assert config.VALID_PRIORITIES == ["S", "A", "B", "C"]
+    assert config.OBSIDIAN_API_URL == "https://127.0.0.1:27124"
+    assert config.TODO_FILE_PATH == "1_memory/todo.md"
