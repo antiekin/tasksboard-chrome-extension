@@ -52,3 +52,25 @@ def test_count_active_today_boundary():
     # "#今日今天" must NOT count — no whitespace boundary after 日
     md = "## S\n- [ ] a #今日今天\n- [ ] b #今日\n"
     assert tw.count_active_today(md) == 1
+
+
+def test_write_tasks_caps_today_and_returns_results(monkeypatch):
+    md = "# T\n## 短期任务（7 天内完成）\n- [ ] x #今日\n- [ ] y #今日\n\n## 其他\n"
+    written = {}
+
+    def reader():
+        return md
+
+    def writer(content):
+        written["content"] = content
+
+    monkeypatch.setattr(tw, "MAX_TODAY", 3)
+    tasks = [{"text": "a", "priority": "A", "category": "工作", "today": True},
+             {"text": "b", "priority": None, "category": None, "today": True}]
+    results = tw.write_tasks(tasks, reader=reader, writer=writer)
+
+    assert results[0]["today_applied"] is True   # 1 slot left (2 existing)
+    assert results[1]["today_applied"] is False  # downgraded
+    assert "- [ ] [A] a #工作 #今日" in written["content"]
+    assert "- [ ] b" in written["content"]
+    assert "- [ ] b #今日" not in written["content"]
