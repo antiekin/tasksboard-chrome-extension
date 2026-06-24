@@ -1,8 +1,8 @@
 """Entry point: wire real deps + start lark long-connection.
 
 Run with: python main.py
-Requires env/config keys: FEISHU_TASKBOT_APP_ID, FEISHU_TASKBOT_APP_SECRET,
-                           FEISHU_TASKBOT_ALLOWED_OPENIDS (list of open_id strings)
+Requires config keys: FEISHU_TASKBOT_APP_ID, FEISHU_TASKBOT_APP_SECRET,
+                       FEISHU_TASKBOT_ALLOWED_OPENIDS (list of open_id strings)
 """
 import json
 import os
@@ -18,11 +18,12 @@ from lark_oapi.api.im.v1 import (
 
 from config import load_keys
 from dedup_store import DedupStore
-from task_extractor import extract_tasks
-from todo_writer import write_tasks
+from task_extractor import extract_message, summarize_tasks
+from todo_writer import write_tasks, complete_task, query_today, query_pool, read_todo
 from feishu_listener import handle_message
+import todo_parser
 
-# Fix 1: suppress InsecureRequestWarning from todo_writer's verify=False requests
+# Suppress InsecureRequestWarning from todo_writer's verify=False requests
 urllib3.disable_warnings()
 
 _keys = load_keys()
@@ -30,7 +31,7 @@ _APP_ID = _keys["FEISHU_TASKBOT_APP_ID"]
 _APP_SECRET = _keys["FEISHU_TASKBOT_APP_SECRET"]
 _ALLOWED = _keys.get("FEISHU_TASKBOT_ALLOWED_OPENIDS", [])
 
-# Fix 3: warn if whitelist is empty — all messages will be silently rejected
+# Warn if whitelist is empty — all messages will be silently rejected
 if not _ALLOWED:
     print(
         "[warn] FEISHU_TASKBOT_ALLOWED_OPENIDS empty — all messages will be rejected; "
@@ -49,12 +50,22 @@ _client = (
 _DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dedup.db")
 _dedup = DedupStore(_DB_PATH)
 
+
+def _read_tasks():
+    """Read todo.md and compress it into a compact task list for the LLM."""
+    return summarize_tasks(todo_parser.parse_todo(read_todo()))
+
+
 # Dependency namespace for handle_message (dependency injection)
 _deps = types.SimpleNamespace(
     allowed_ids=_ALLOWED,
     dedup=_dedup,
-    extract=extract_tasks,
+    read_tasks=_read_tasks,
+    extract=extract_message,
     write=write_tasks,
+    complete=complete_task,
+    query_today=query_today,
+    query_pool=query_pool,
 )
 
 
