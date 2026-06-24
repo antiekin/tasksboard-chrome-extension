@@ -150,26 +150,6 @@ class TaskManager {
   }
 
   /**
-   * Get active (incomplete) tasks
-   * @returns {Array} Active tasks sorted by order
-   */
-  getActiveTasks() {
-    return this.getTodaysTasks()
-      .filter(t => !t.completed)
-      .sort((a, b) => a.order - b.order);
-  }
-
-  /**
-   * Get completed tasks
-   * @returns {Array} Completed tasks sorted by completion time
-   */
-  getCompletedTasks() {
-    return this.getTodaysTasks()
-      .filter(t => t.completed)
-      .sort((a, b) => new Date(b.completedAt) - new Date(a.completedAt));
-  }
-
-  /**
    * Clean up old completed tasks (older than 7 days)
    */
   cleanupOldTasks() {

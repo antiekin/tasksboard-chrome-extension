@@ -20,14 +20,16 @@
 
 ```
 ├── manifest.json          # 扩展配置文件，定义权限和侧边栏
-├── background.js          # 后台服务 worker，处理侧边栏打开和初始化
-├── sidepanel.html         # 主界面 HTML 结构
+├── background.js          # 后台服务 worker：侧边栏打开 + 午夜 alarm
+├── sidepanel.html         # 主界面 HTML 结构（今日任务 + 任务池两标签）
 ├── sidepanel.css          # 样式表，包含动画和主题颜色
 ├── sidepanel.js           # UI 控制器，处理所有 DOM 操作和事件
 ├── storage.js             # 存储抽象层，封装 chrome.storage.local API
-├── task-manager.js        # 业务逻辑层，纯逻辑无 DOM 操作
+├── task-manager.js        # 任务 CRUD 业务逻辑层（纯逻辑，无 DOM）
+├── daily-focus.js         # 今日页逻辑：必做筛选、streak、超额、日志生成
 ├── obsidian-sync.js       # Obsidian 双向同步引擎（Daily Tasks）
-├── todo-sync.js           # Obsidian 双向同步引擎（To-do List）
+├── todo-sync.js           # Obsidian 双向同步引擎（To-do List / 任务池）
+├── tests/                 # Node.js 单元测试（node --test tests/*.test.js）
 └── icons/                 # 扩展图标
 ```
 
@@ -35,113 +37,121 @@
 
 ```
 UI Layer (sidepanel.js)
-    ↓ 用户交互触发事件
-Business Logic (task-manager.js)
-    ↓ 处理数据和业务规则
-Storage Layer (storage.js)          Sync Layer (obsidian-sync.js)
-    ↓ 数据持久化                        ↓ 双向同步
-chrome.storage.local API            Obsidian Local REST API
+    ↓ 事件触发
+Daily Focus Logic (daily-focus.js)   Business Logic (task-manager.js)
+    ↓ 必做 / streak / 超额               ↓ 任务 CRUD
+Storage Layer (storage.js)            Sync Layer (obsidian-sync.js / todo-sync.js)
+    ↓ 持久化                              ↓ 双向同步
+chrome.storage.local API              Obsidian Local REST API
 ```
 
 **关键原则：**
 - `task-manager.js` 不依赖 DOM，可独立测试
-- `sidepanel.js` 只处理 UI 逻辑，调用 task-manager 方法
+- `daily-focus.js` 纯函数逻辑（getMustDoItems / buildDayRecord / computeStreak 等），可 `require` 测试
+- `sidepanel.js` 只处理 UI 逻辑，不含业务计算
 - `storage.js` 提供统一的存储接口，隔离 Chrome API
 
 ## 数据模型
 
-### 任务对象 (Task)
+### Todo Item（任务池条目）
 
 ```javascript
+// 存储在 todoData.sections[].items[] 内
 {
-  id: "uuid-string",              // 唯一标识符
-  content: "任务内容",             // 任务文本
-  priority: "S"|"A"|"B"|"C"|null, // 优先级 (S最高, C最低, null无)
-  completed: false,               // 完成状态
-  order: 0,                       // 排序序号（越小越靠前）
-  createdAt: "2026-02-07",        // 创建日期 (ISO YYYY-MM-DD)
-  completedAt: null,              // 完成时间 (ISO string or null)
-  category: null                  // 分类标签 ("家庭"|"工作"|"健康"|"学习"|null)
+  id: "uuid-string",
+  text: "任务文本",
+  reference: null | "wikilink",   // Obsidian wikilink 引用
+  priority: "S"|"A"|"B"|"C"|null,
+  category: "家庭"|"工作"|"健康"|"学习"|null,
+  completed: false,
+  order: 0,
+  today: true                     // ← #今日 标记：true = 本日必做；false = 普通池任务
 }
 ```
 
-### 存储结构
+**`#今日` 标记机制：**
+- Obsidian 中在任务行末尾加 `#今日` → `todo-sync.js` 解析时将 `today: true` 并从 `text` 剥离该 tag
+- 序列化回 Markdown 时，`today: true` 的条目行末自动追加 ` #今日`
+- `getMustDoItems(todoData)` 返回所有 `today: true` 的条目（跨 section），上限 `MAX_MUST_DO=3`
+
+### 存储结构（chrome.storage.local）
 
 ```javascript
 {
-  tasks: [...],                   // 任务数组
-  preferences: {                  // 用户偏好
-    completedSectionExpanded: false
-  },
-  todoData: {                     // To-do List 数据
+  tasks: [...],                   // TaskManager 管理的旧日任务数组（跨日移动用）
+  preferences: { completedSectionExpanded: false },
+  todoData: {                     // 任务池（To-do List）主数据
     preamble: "...",              // Markdown 前言（frontmatter + H1）
-    sections: [{                  // H2 分段
+    sections: [{
       name: "短期任务",
       comment: "<!-- ... -->",
-      items: [{ id, text, reference, priority, category, completed, order }]
+      items: [{ id, text, reference, priority, category, completed, order, today }]
     }]
-  }
+  },
+  completionHistory: {            // 每日达成记录（跨日归档写入）
+    "2026-06-23": {
+      mustDo: [{ text, completed }],
+      overAchieved: 2,            // 本日超额完成条数
+      streak: 5                   // 截至当日连续天数
+    }
+  },
+  todayExtra: {                   // 当日临时必做（addTempMustDo 写入，归档后清空）
+    tempItems: [{ id, text, completed }]
+  },
+  lastRolloverDate: "2026-06-23"  // 最后一次归档日期（防跨日遗漏）
 }
 ```
 
 ## 核心功能实现
 
-### 1. 任务拖拽排序
+### 1. 今日必做（今日页）
 
-**实现方式：**
-- 使用 HTML5 Drag and Drop API
-- 拖拽时添加 `.dragging` 类（半透明效果）
-- `dragover` 事件中动态调整 DOM 顺序
-- `dragend` 事件中更新所有任务的 `order` 值并保存
+**数据来源：**
+- `#今日` 标记的任务池条目（`today: true`），上限 3 条
+- `addTempMustDo()` 当日临时新建（写入 `todayExtra.tempItems`）
 
-**关键函数：**
-- `setupDragAndDrop()` - 绑定拖拽事件
-- `getDragAfterElement()` - 计算插入位置
-- `taskManager.normalizeOrders()` - 重新计算顺序号（0, 1, 2...）
+**关键函数（daily-focus.js）：**
+- `getMustDoItems(todoData)` — 聚合正式 + 临时必做列表
+- `allMustDoComplete(todoData)` — 检测全部完成
+- `canAddMustDo(todoData)` — 当前是否可再添加（< MAX_MUST_DO）
 
-### 2. 优先级循环切换
+**完成流程：**
+1. 点击卡片勾选 → `completeMustDoItem(id)` → 触发完成特效
+2. 全部完成 → `showAllDoneCelebration()` → 烟花 + "所有必做完成！" banner
 
-**交互流程：**
-点击优先级标记 → S → A → B → C → 无 → S（循环）
+### 2. 超额完成 + 长期看板
 
-**实现：**
-- `taskManager.cyclePriority(id)` - 业务逻辑
-- `priorityLevels` 数组定义循环顺序
-- CSS 类 `priority-s/a/b/c` 控制颜色
+**超额：** 正式必做全部完成后，再完成任务池中的其他任务 → 计入 `overAchieved`；金色高亮特效。
 
-**颜色编码：**
-- S: `#EA4335` (红色) - 超重要
-- A: `#F9AB00` (橙色) - 重要
-- B: `#4285F4` (蓝色) - 普通
-- C: `#80868B` (灰色) - 低优先级
+**长期看板（board）：** 展示过去 7 周 streak、本周/本月 tally、徽章。
+- `computeStreak(history)` — 从 completionHistory 计算连续达成天数
+- `tallyOverAchieved(history, start, end)` — 计算区间内超额总和
+- `refreshBoard()` / `refreshStreakMini()` — 更新看板 DOM
 
-### 3. 点击内容编辑
+### 3. 跨日归档
 
-**实现：**
-- 任务 content 使用 `contenteditable` 属性
-- `blur` 事件保存修改
-- `Enter` 键触发 blur 保存
-- `Escape` 键恢复原内容并取消编辑
+**触发时机（两路）：**
+1. background.js 午夜 alarm → `chrome.runtime.sendMessage({ type: 'daily-archive', date: yesterday })`
+2. 启动 catch-up：sidepanel 打开时若 `lastRolloverDate !== today`，立即补跑
 
-**注意：**
-- 使用 `textContent` 而非 `innerHTML` 防止 XSS
-- 编辑时显示蓝色边框（`.task-content:focus` 样式）
+**归档流程（`handleDailyArchive(dateStr)`）：**
+1. `buildDayRecord(todoData, extra)` 汇总必做+超额
+2. `storage.saveCompletionDay(date, record)` 写入 completionHistory
+3. `obsidianSync.writeDailyLog(date, mustDo, overAchieved)` 可选写 Obsidian 日志
+4. 清空所有 `today: true` 标记（任务退回任务池）
+5. 清空 todayExtra
 
-### 4. 已完成任务管理
+### 4. 任务池（Todo 标签）
 
-**行为：**
-- 点击复选框 → 任务标记完成 → 移到底部 "Completed (n)" 区域
-- 已完成任务：灰色、删除线、不可拖拽
-- 点击 "Completed" 标题 → 折叠/展开
-- 折叠状态持久化到 `preferences.completedSectionExpanded`
+- 数据存储在 `todoData.sections[].items[]`
+- `#今日` 标记决定哪些进入今日页
+- 跨标签移动：`handleMoveToDaily(section, itemId)` / `handleMoveToTodo(taskId)`，移动后调用 `renderToday()` + `renderTodoSections()`
+- 双向同步 Obsidian `Todo_List.md`（通过 `todo-sync.js`）
 
 ### 5. 数据持久化
 
-**策略：**
-- 所有修改操作调用 `saveTasksDebounced()`
-- 防抖 300ms 后保存到 `chrome.storage.local`
-- 仅显示 `createdAt === 今日日期` 的任务
-- 自动清理 7 天前的已完成任务（`cleanupOldTasks()`）
+- 所有修改操作调用 `saveTasksDebounced()` / `saveTodoDebounced()`（300ms 防抖）
+- 保存到 `chrome.storage.local`，同时可选同步 Obsidian
 
 ## 开发规范
 
@@ -168,10 +178,11 @@ chrome.storage.local API            Obsidian Local REST API
 
 ### 如何添加新功能
 
-1. **修改数据模型** → 更新 `task-manager.js` 中的任务对象
-2. **添加业务逻辑** → 在 `TaskManager` 类中添加新方法
+1. **今日页逻辑** → 修改 `daily-focus.js`（纯函数，加测试）
+2. **业务逻辑** → 修改 `task-manager.js` 或 `daily-focus.js`
 3. **更新 UI** → 修改 `sidepanel.html` 和 `sidepanel.css`
 4. **绑定交互** → 在 `sidepanel.js` 中添加事件处理
+5. **运行测试** → `node --test tests/*.test.js`
 
 ### 如何修改样式
 
@@ -184,38 +195,34 @@ chrome.storage.local API            Obsidian Local REST API
 1. 在 `chrome://extensions/` 重新加载插件
 2. 右键侧边栏 → 「检查」打开 DevTools
 3. 查看 Console 日志
-4. 在 Application → Storage → Local Storage 查看数据
+4. 在 Application → Storage → Local Storage 查看 `completionHistory`、`todoData`、`todayExtra`
 
 ## 常见问题
 
-### Q: 任务没有保存？
-**A:** 检查 Console 是否有存储错误，确认 `chrome.storage.local` 权限已在 manifest.json 中声明。
+### Q: 今日必做没有显示？
+**A:** 检查任务池中是否有 `#今日` 标记的条目（`item.today === true`）。可在 DevTools Storage 查看 `todoData.sections[].items[].today`。
 
-### Q: 拖拽排序不工作？
-**A:** 确保任务元素设置了 `draggable="true"` 且未被标记为 `completed`。
+### Q: 跨日归档没有触发？
+**A:** 检查 `lastRolloverDate` 是否被正确写入。启动时 sidepanel 会自动补跑遗漏归档。`background.js` 的午夜 alarm 依赖 `chrome.alarms` 权限。
 
 ### Q: 样式没有生效？
 **A:** 检查 CSS 选择器优先级，使用 DevTools 检查元素的实际样式。
 
 ### Q: 如何清除所有数据？
-**A:** 打开 DevTools → Application → Local Storage → 删除对应键值。
+**A:** 打开 DevTools → Application → Storage → Local Storage → 删除对应键值。注意 `completionHistory` 是长期历史，按需保留。
 
-## 性能优化建议
+## 性能优化
 
-- **防抖保存**：已实现 300ms 防抖，避免频繁写入
-- **DOM 批量更新**：`renderTasks()` 一次性渲染所有任务
-- **事件委托**：可考虑在容器上使用事件委托替代单个绑定
-- **虚拟滚动**：任务超过 100 个时可考虑虚拟滚动优化
+- **防抖保存**：300ms 防抖，避免频繁写入
+- **纯函数逻辑**：`daily-focus.js` 可独立 `require` 进行单测，无 Chrome API 依赖
+- **事件委托**：任务池列表使用事件委托
 
 ## 待优化功能
 
-- [ ] 添加扩展图标（16/32/48/128px PNG）
 - [ ] 任务搜索过滤
-- [ ] 任务分组功能
 - [ ] 导入/导出 JSON 数据
 - [ ] 快捷键支持（Ctrl+N 新建等）
 - [ ] 暗色主题切换
-- [ ] 任务统计和可视化
 
 ## 安全注意事项
 
@@ -301,7 +308,18 @@ chrome.storage.local API            Obsidian Local REST API
 - ✅ 跨标签移动（Daily ↔ Todo）+ Todo 内跨栏目移动（下拉菜单）
 - ✅ UI 优化：同步指示器移至 header、来源引用改为图标 tooltip、行间距紧凑化
 
+**v3.0.0 (2026-06-23)**
+- ✅ **今日页重设计**：1-3 必做卡片（`#今日` 标记机制）+ 进度条 + streak mini 显示
+- ✅ **完成反馈**：粒子特效 + 过渡动画；全部完成 → "所有必做完成！" 庆祝
+- ✅ **超额完成**：正式必做完成后额外完成任务 → 金色高亮 + 超额计数
+- ✅ **长期看板**：过去 7 周 streak、本周/本月超额 tally、徽章系统
+- ✅ **跨日归档**：午夜 alarm + 启动 catch-up 双重触发；buildDayRecord 写入 completionHistory
+- ✅ **任务池重定位**：任务池标签取代旧今日清单，#今日 标记选入今日必做
+- ✅ **daily-focus.js**：纯函数逻辑，Node.js 可直接 require 测试
+- ✅ **单元测试**：`tests/` 目录，21 个测试 100% pass（daily-focus + todo-sync + smoke）
+- ✅ **清理旧路径**：移除旧 renderTasks/createTaskElement 等死代码；getActiveTasks/getCompletedTasks 从 task-manager.js 移除
+
 ---
 
-**最后更新：** 2026-03-11
+**最后更新：** 2026-06-24
 **维护者：** Claude AI
