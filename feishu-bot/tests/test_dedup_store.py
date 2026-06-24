@@ -13,3 +13,10 @@ def test_release_allows_reclaim(tmp_path):
     assert store.claim("msg_2") is True
     store.release("msg_2")
     assert store.claim("msg_2") is True  # reclaimable after release
+
+
+def test_claim_persists_across_reopen(tmp_path):
+    path = tmp_path / "dedup.db"
+    DedupStore(path).claim("msg_3")
+    store2 = DedupStore(path)
+    assert store2.claim("msg_3") is False  # persisted across reopen

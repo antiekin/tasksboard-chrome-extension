@@ -22,3 +22,7 @@ class DedupStore:
         """Remove the claim so a redelivered event can be retried."""
         self.conn.execute("DELETE FROM processed WHERE message_id = ?", (message_id,))
         self.conn.commit()
+
+    def close(self):
+        """Close the underlying SQLite connection."""
+        self.conn.close()
