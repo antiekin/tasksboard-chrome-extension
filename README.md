@@ -109,9 +109,10 @@
 
 ```javascript
 {
-  mustDo: [{ text: "任务", completed: true }],
-  overAchieved: 2,   // 超额完成条数
-  streak: 5          // 截至当日连续天数
+  mustDoTotal: 3,             // 当日必做总数
+  mustDoCompleted: 3,         // 当日已完成必做数
+  overAchieved: ["任务A"]    // 超额完成的任务文本数组（非计数）
+  // streak / weekly / monthly tally 在读取时由 computeStreak / tallyOverAchieved 计算，不存储
 }
 ```
 

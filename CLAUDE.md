@@ -90,9 +90,10 @@ chrome.storage.local API              Obsidian Local REST API
   },
   completionHistory: {            // 每日达成记录（跨日归档写入）
     "2026-06-23": {
-      mustDo: [{ text, completed }],
-      overAchieved: 2,            // 本日超额完成条数
-      streak: 5                   // 截至当日连续天数
+      mustDoTotal: 3,             // 当日必做总数
+      mustDoCompleted: 3,         // 当日已完成必做数
+      overAchieved: ["任务A"]    // 超额完成的任务文本数组（非计数！）
+      // streak / weekly / monthly tally 均在读取时计算，不存储在此
     }
   },
   todayExtra: {                   // 当日临时必做（addTempMustDo 写入，归档后清空）

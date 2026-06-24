@@ -149,6 +149,10 @@ async function completeMustDoItem(id) {
  */
 async function handleDailyArchive(dateStr) {
   try {
+    // Idempotency guard: don't overwrite a good record already written for this day
+    const hist = await storage.getCompletionHistory();
+    if (hist[dateStr] && hist[dateStr].mustDoTotal > 0) return;
+
     const extra = await storage.getTodayExtra(dateStr);
     const mustDo = getMustDoItems(todoData).map(i => ({ text: i.text, completed: i.completed }));
     const record = buildDayRecord(todoData, extra);
@@ -156,11 +160,15 @@ async function handleDailyArchive(dateStr) {
     if (obsidianSync && obsidianSync.connected) {
       await obsidianSync.writeDailyLog(dateStr, mustDo, record.overAchieved);
     }
-    // Clear #今日 flags across all sections
+    // Clear #今日 flags across all sections — persist synchronously so flags
+    // survive a midnight panel teardown (don't rely on 300ms debounce)
     for (const s of todoData.sections) {
       for (const it of s.items) it.today = false;
     }
-    saveTodoDebounced();
+    await storage.saveTodoData(todoData);
+    if (todoSync && todoSync.connected) {
+      try { await todoSync.syncToRemote(todoData); } catch (e) { /* offline is fine; local is saved */ }
+    }
     await storage.clearTodayExtra();
     renderToday();
   } catch (error) {
