@@ -7,6 +7,7 @@ Requires env/config keys: FEISHU_TASKBOT_APP_ID, FEISHU_TASKBOT_APP_SECRET,
 import json
 import os
 import types
+import urllib3
 
 import lark_oapi as lark
 from lark_oapi.api.im.v1 import (
@@ -21,10 +22,20 @@ from task_extractor import extract_tasks
 from todo_writer import write_tasks
 from feishu_listener import handle_message
 
+# Fix 1: suppress InsecureRequestWarning from todo_writer's verify=False requests
+urllib3.disable_warnings()
+
 _keys = load_keys()
 _APP_ID = _keys["FEISHU_TASKBOT_APP_ID"]
 _APP_SECRET = _keys["FEISHU_TASKBOT_APP_SECRET"]
 _ALLOWED = _keys.get("FEISHU_TASKBOT_ALLOWED_OPENIDS", [])
+
+# Fix 3: warn if whitelist is empty — all messages will be silently rejected
+if not _ALLOWED:
+    print(
+        "[warn] FEISHU_TASKBOT_ALLOWED_OPENIDS empty — all messages will be rejected; "
+        "send the bot a message to see your open_id in the log, then add it"
+    )
 
 # Build a standard Feishu API client for sending replies
 _client = (
@@ -77,22 +88,28 @@ def _on_message(data: P2ImMessageReceiveV1) -> None:
     Extracts sender open_id, message_id, and text content, then delegates to
     handle_message for orchestration. Sends receipt back to sender if non-None.
 
+    Wrapped in a top-level try/except so a single malformed or unexpected event
+    never escapes and disrupts the long-connection loop.
+
     Args:
         data: Lark event object for im.message.receive_v1.
     """
-    msg = data.event.message
-    sender = data.event.sender.sender_id.open_id
-    print(
-        f"[recv] open_id={sender} "
-        f"message_id={msg.message_id} "
-        f"type={msg.message_type}"
-    )
-    if msg.message_type != "text":
-        return
-    text = json.loads(msg.content).get("text", "")
-    receipt = handle_message(text, sender, msg.message_id, deps=_deps)
-    if receipt:
-        _send(sender, receipt)
+    try:
+        msg = data.event.message
+        sender = data.event.sender.sender_id.open_id
+        print(
+            f"[recv] open_id={sender} "
+            f"message_id={msg.message_id} "
+            f"type={msg.message_type}"
+        )
+        if msg.message_type != "text":
+            return
+        text = json.loads(msg.content).get("text", "")
+        receipt = handle_message(text, sender, msg.message_id, deps=_deps)
+        if receipt:
+            _send(sender, receipt)
+    except Exception as exc:
+        print(f"[error] _on_message failed: {exc}")
 
 
 def main():
