@@ -25,6 +25,7 @@ from todo_writer import (
 )
 from feishu_listener import handle_message
 import todo_parser
+import archive
 
 # Suppress InsecureRequestWarning from todo_writer's verify=False requests
 urllib3.disable_warnings()
@@ -59,6 +60,16 @@ def _read_tasks():
     return summarize_tasks(todo_parser.parse_todo(read_todo()))
 
 
+def _complete_with_log(match):
+    r = complete_task(match)
+    if r:
+        try:
+            archive.append_completion(r['display'])
+        except Exception as exc:
+            print(f'[archive] completion log failed: {exc}')
+    return r
+
+
 # Dependency namespace for handle_message (dependency injection)
 _deps = types.SimpleNamespace(
     allowed_ids=_ALLOWED,
@@ -66,7 +77,7 @@ _deps = types.SimpleNamespace(
     read_tasks=_read_tasks,
     extract=extract_message,
     write=write_tasks,
-    complete=complete_task,
+    complete=_complete_with_log,
     delete=delete_task,
     query_today=query_today,
     query_pool_by_section=query_pool_by_section,

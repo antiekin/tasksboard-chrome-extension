@@ -10,6 +10,8 @@ rsync -a --exclude venv --exclude '__pycache__' --exclude tests --exclude dedup.
   --exclude '*.log' --exclude deploy "$SRC"/ "$DEST"/
 cp "$SRC/deploy/wrapper.sh" "$DEST/wrapper.sh"
 chmod +x "$DEST/wrapper.sh"
+cp "$SRC/deploy/wrapper-cleanup.sh" "$DEST/wrapper-cleanup.sh"
+chmod +x "$DEST/wrapper-cleanup.sh"
 
 # venv with homebrew python (has SSL); created once, reused after
 if [ ! -d "$DEST/venv" ]; then
@@ -20,4 +22,8 @@ fi
 sed "s#__HOME__#$HOME#g" "$SRC/deploy/com.feishu-task-bot.runner.plist" > "$PLIST"
 launchctl unload "$PLIST" 2>/dev/null || true
 launchctl load "$PLIST"
+CLEANUP="$HOME/Library/LaunchAgents/com.feishu-task-cleanup.runner.plist"
+sed "s#__HOME__#$HOME#g" "$SRC/deploy/com.feishu-task-cleanup.runner.plist" > "$CLEANUP"
+launchctl unload "$CLEANUP" 2>/dev/null || true
+launchctl load "$CLEANUP"
 echo "deployed; tail -f $DEST/bot.log"
