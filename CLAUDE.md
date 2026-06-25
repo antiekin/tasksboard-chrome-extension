@@ -324,3 +324,19 @@ chrome.storage.local API              Obsidian Local REST API
 
 **最后更新：** 2026-06-24
 **维护者：** Claude AI
+
+## 飞书任务机器人子项目(feishu-bot/)— 经验
+
+- **架构**:独立 Python 进程(`feishu-bot/`),lark-oapi 长连接收消息 → `task_extractor`(LLM 意图+提炼)→ `todo_writer`/`archive`(Obsidian REST 读写)→ `feishu_listener`(纯逻辑路由,依赖注入)。`todo_parser.py` 移植扩展端 `todo-sync.js` 的解析/序列化,两端零格式漂移。详见 memory `feishu-task-bot`。
+- **写入格式契约**:严格对齐 `todo-sync.js` 的 `toMarkdown`(`- [ ] [优先级] 文本 #分类 #今日`),否则扩展 poll 会反复误判变更。
+- **[2026-06-25] 真实 todo.md 的引用格式坑**:手写任务是 `文本）← [[引用]] #分类`(引用在分类**前**、箭头紧贴全角括号无空格)。移植 `todo-sync.js` 的引用正则 `^(.+?)\s+←\s+(\[\[..\]\])$`(锚行尾 + 要求箭头前空格)对真实数据失效——引用残留在 text 里,导致标记完成匹配不上、查询显示脏。改为 `\s*←\s*(\[\[.+?\]\])` 的 `search`(任意位置 + 箭头前后空格可选)。教训:移植解析逻辑必须用**真实数据**端到端验证,单测样例往往覆盖不到手写格式。
+- **Obsidian REST key**:复用 api-keys.json 现有的 `DIBRAIN_OBSIDIAN_REST_API_KEY`(非 plan 里假设的 `OBSIDIAN_REST_KEY`);key 每机独立,旧值会 401,需取当前 Obsidian 插件页的值。
+- **LLM 渠道**:本项目特例 OpenRouter 优先 → 云雾兜底(与全局"云雾优先"相反,用户指定)。
+- **完成历史 + 清理**:完成即写每日日志(带时间)、每天 03:00 LaunchAgent 清 todo.md 的 `[x]`。todo.md 保持干净,历史按日期留快照(把扩展端 Daily Tasks 快照的好处接回飞书侧)。
+- **改代码后必须重跑 `feishu-bot/deploy/deploy.sh`**(双源:worktree 改了不会自动同步到 ~/.local)。
+
+## Token Usage(续)
+
+| Checkpoint | Date | Tokens | Cost |
+|------------|------|--------|------|
+| #9 飞书 bot v1-v3 | 2026-06-25 | ~1.5–2M(估算,脚本未找到会话) | 量级估算,未精确 |
