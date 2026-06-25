@@ -1,17 +1,21 @@
-"""Orchestration for an incoming Feishu message (v2: LLM intent routing, dependency-injected).
+"""Orchestration for an incoming Feishu message (v3: intent routing + status overview).
 
 Deps namespace expected by handle_message:
-  .allowed_ids   — iterable of allowed open_id strings
-  .dedup         — DedupStore (.claim(mid)->bool, .release(mid))
-  .read_tasks    — callable() -> str  (compact task list for the LLM)
-  .extract       — callable(text, task_list) -> dict  (raises AllChannelsFailed)
-                   dict = {intent, tasks, pool_filter:{category,section}, complete_match}
-  .write         — callable(tasks) -> list[dict]   (add path; v1 write_tasks)
-  .complete      — callable(match) -> str|None      (mark-complete; display text or None)
-  .query_today   — callable() -> {items, total, done}
-  .query_pool    — callable(category, section) -> list[{text,category,section}]
+  .allowed_ids          — iterable of allowed open_id strings
+  .dedup                — DedupStore (.claim(mid)->bool, .release(mid))
+  .read_tasks           — callable() -> str  (compact task list for the LLM)
+  .extract              — callable(text, task_list) -> dict  (raises AllChannelsFailed)
+                          dict = {intent, tasks, pool_filter:{category,section}, match_text}
+  .write                — callable(tasks) -> list[dict]              (add path)
+  .complete             — callable(match) -> {display, was_today}|None
+  .delete               — callable(match) -> {display, was_today}|None
+  .query_today          — callable() -> {items, total, done}
+  .query_pool_by_section— callable(category) -> [{name, items:[{text,category,completed}]}]
 """
 from task_extractor import AllChannelsFailed
+
+_DONE = "✅ "    # completed mark
+_TODO = "　 "    # incomplete: leave blank (full-width space keeps alignment)
 
 
 def format_receipt(results, wanted_today=frozenset()):
@@ -27,48 +31,54 @@ def format_receipt(results, wanted_today=frozenset()):
     return "\n".join(lines)
 
 
+def _cat(it):
+    return f" #{it['category']}" if it.get("category") else ""
+
+
 def format_today(q):
-    """Receipt for query_today: progress header + each item with done/undone mark."""
-    lines = [f"📋 今日必做 ({q['done']}/{q['total']})"]
+    """Today's must-do list: ✅ done, blank for not-done."""
+    lines = [f"📋 今日必做 {q['done']}/{q['total']}"]
     for it in q["items"]:
-        mark = "✅" if it["completed"] else "⬜"
-        cat = f" #{it['category']}" if it.get("category") else ""
-        lines.append(f"{mark} {it['text']}{cat}")
+        mark = _DONE if it["completed"] else _TODO
+        lines.append(f"{mark}{it['text']}{_cat(it)}")
     if q["total"] == 0:
         lines.append("（今天还没设必做，发一句话记一件吧）")
     return "\n".join(lines)
 
 
-def format_pool(items, max_n=15):
-    """Receipt for query_pool: list incomplete items, truncate past max_n."""
-    if not items:
-        return "🔍 没有匹配的未完成任务"
-    shown = items[:max_n]
-    lines = ["📂 任务池："]
-    for it in shown:
-        cat = f" #{it['category']}" if it.get("category") else ""
-        lines.append(f"⬜ {it['text']}{cat}")
-    if len(items) > max_n:
-        lines.append(f"…还有 {len(items) - max_n} 条，去扩展看")
+def format_pool_grouped(sections):
+    """Task pool grouped by section: 【section】 then each task (✅ done / blank)."""
+    if not sections:
+        return "📂 任务池：没有匹配的任务"
+    lines = ["📂 任务池"]
+    for sec in sections:
+        lines.append(f"【{sec['name']}】")
+        for it in sec["items"]:
+            mark = _DONE if it["completed"] else _TODO
+            lines.append(f"{mark}{it['text']}{_cat(it)}")
     return "\n".join(lines)
 
 
-def format_complete(disp, asked):
-    """Receipt for complete: show the marked task's full text, or a not-found note."""
-    if disp is None:
+def _format_mutation(verb, r, asked, deps):
+    """Build a complete/delete receipt: the action line + status overview.
+
+    - completed/deleted a #今日 task → append today's list only
+    - completed/deleted a pool task  → append today's list AND the pool overview
+    """
+    if r is None:
         return f"🔍 没找到匹配「{asked}」的任务，可换个说法或去扩展操作"
-    return f"✅ 已完成：{disp}"
+    lines = [f"{verb}：{r['display']}", "", format_today(deps.query_today())]
+    if not r["was_today"]:
+        lines += ["", format_pool_grouped(deps.query_pool_by_section())]
+    return "\n".join(lines)
 
 
 def handle_message(text, sender, message_id, *, deps):
     """Orchestrate one incoming Feishu message with intent routing.
 
     Flow: whitelist → dedup claim → read task list → LLM extract {intent,...} →
-    route to add / query_today / query_pool / complete. LLM total failure falls back
-    to add-raw-text (spec §9, keeps claim). Any other exception releases the claim.
-
-    Returns:
-        str | None: receipt to send back, or None if silently ignored.
+    route to add / query_today / query_pool / complete / delete. LLM total failure
+    falls back to add-raw-text (spec §9, keeps claim). Other exceptions release claim.
     """
     if sender not in deps.allowed_ids:
         return None
@@ -79,7 +89,6 @@ def handle_message(text, sender, message_id, *, deps):
         try:
             result = deps.extract(text, task_list)
         except AllChannelsFailed:
-            # spec §9: LLM 全失败 → 原文入池（无法判意图时的保守默认），保留 claim
             results = deps.write([{"text": text, "priority": None,
                                    "category": None, "today": False}])
             return format_receipt(results, frozenset()) + "\n（识别失败，已按原文记录，请稍后整理）"
@@ -88,9 +97,13 @@ def handle_message(text, sender, message_id, *, deps):
             return format_today(deps.query_today())
         if intent == "query_pool":
             pf = result["pool_filter"]
-            return format_pool(deps.query_pool(category=pf.get("category"), section=pf.get("section")))
+            return format_pool_grouped(deps.query_pool_by_section(category=pf.get("category")))
         if intent == "complete":
-            return format_complete(deps.complete(result["complete_match"]), result["complete_match"])
+            return _format_mutation("✅ 已完成", deps.complete(result["match_text"]),
+                                    result["match_text"], deps)
+        if intent == "delete":
+            return _format_mutation("🗑 已删除", deps.delete(result["match_text"]),
+                                    result["match_text"], deps)
         # default: add
         wanted_today = {t["text"] for t in result["tasks"] if t.get("today")}
         return format_receipt(deps.write(result["tasks"]), wanted_today)

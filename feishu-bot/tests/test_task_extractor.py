@@ -56,13 +56,24 @@ def test_parse_query_pool_invalid_category_nullified():
 
 
 def test_parse_complete_intent():
+    d = te.parse_llm_json('{"intent":"complete","match_text":"买菜"}')
+    assert d["intent"] == "complete" and d["match_text"] == "买菜"
+
+
+def test_parse_complete_match_legacy_alias():
+    # backward-compat: complete_match still accepted as match_text
     d = te.parse_llm_json('{"intent":"complete","complete_match":"买菜"}')
-    assert d["intent"] == "complete" and d["complete_match"] == "买菜"
+    assert d["match_text"] == "买菜"
 
 
-def test_parse_complete_blank_match_to_none():
-    d = te.parse_llm_json('{"intent":"complete","complete_match":"  "}')
-    assert d["complete_match"] is None
+def test_parse_delete_intent():
+    d = te.parse_llm_json('{"intent":"delete","match_text":"看球"}')
+    assert d["intent"] == "delete" and d["match_text"] == "看球"
+
+
+def test_parse_blank_match_to_none():
+    d = te.parse_llm_json('{"intent":"complete","match_text":"  "}')
+    assert d["match_text"] is None
 
 
 def test_parse_invalid_intent_defaults_add():

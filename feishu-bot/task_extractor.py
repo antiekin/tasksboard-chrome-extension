@@ -1,8 +1,8 @@
-"""Extract intent + structured payload from a Feishu message via LLM (v2).
+"""Extract intent + structured payload from a Feishu message via LLM (v3).
 
-One LLM call classifies the message intent (add/query_today/query_pool/complete)
+One LLM call classifies the message intent (add/query_today/query_pool/complete/delete)
 and produces the matching payload. The current task list (parsed from todo.md) is
-injected so the model can both judge intent and locate the "complete" target.
+injected so the model can both judge intent and locate the complete/delete target.
 """
 import json
 import re
@@ -18,14 +18,16 @@ SYSTEM_PROMPT = """你是任务助手。判断用户消息的意图并输出 JSO
 - "query_today"：想看今天的必做
 - "query_pool"：想看任务池/某分类/某栏目的任务
 - "complete"：说某件事做完了/完成了
+- "delete"：要删除/去掉某个任务（不是完成，是移除）
 
 输出格式：
-{"intent":"...","tasks":[{"text","priority","category","today"}],"pool_filter":{"category":null,"section":null},"complete_match":null}
+{"intent":"...","tasks":[{"text","priority","category","today"}],"pool_filter":{"category":null,"section":null},"match_text":null}
 
 规则：
 - intent=add：填 tasks。text 去口水；priority 仅 S/A/B/C 否则 null；category 仅 家庭/工作/健康/学习 否则 null；today：消息表达"今天/马上/必须今天"→true。可多任务。
 - intent=query_pool：填 pool_filter。说"工作的任务"→category"工作"；说某栏目名→section；泛指"任务池/还有什么"→都 null。
-- intent=complete：从下方「当前任务」列表里挑最匹配且未完成的一条，把它的纯文本（不含 #分类/#今日）放进 complete_match；没有合理匹配→null。
+- intent=complete 或 delete：从下方「当前任务」列表里挑最匹配的一条，把它的纯文本（不含 #分类/#今日）放进 match_text；没有合理匹配→null。
+- 区分 complete 与 delete：消息说"做完了/完成了/搞定了"→complete；说"删掉/删除/去掉/不要了"→delete。
 - 不相关字段留空/ null。只输出 JSON。"""
 
 
@@ -52,7 +54,7 @@ def build_messages(user_text, task_list):
     """Build OpenAI-format messages, injecting the current task list."""
     user = user_text
     if task_list:
-        user = f"{user_text}\n\n当前任务（供判断意图和定位「完成」目标）：\n{task_list}"
+        user = f"{user_text}\n\n当前任务（供判断意图和定位「完成/删除」目标）：\n{task_list}"
     return [{"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": user}]
 
@@ -77,24 +79,25 @@ def _clean_tasks(items):
 
 
 def parse_llm_json(raw):
-    """Parse LLM output into {intent, tasks, pool_filter, complete_match}.
+    """Parse LLM output into {intent, tasks, pool_filter, match_text}.
 
     Invalid/missing intent defaults to "add". Category in pool_filter is validated
-    against the four allowed categories. complete_match is normalized to None if blank.
+    against the four allowed categories. match_text is normalized to None if blank.
     """
     data = json.loads(_strip_fence(raw))
     intent = data.get("intent")
-    if intent not in ("add", "query_today", "query_pool", "complete"):
+    if intent not in ("add", "query_today", "query_pool", "complete", "delete"):
         intent = "add"
     pf = data.get("pool_filter") or {}
     cat = pf.get("category") if pf.get("category") in VALID_CATEGORIES else None
-    cm = data.get("complete_match")
-    cm = cm.strip() if isinstance(cm, str) and cm.strip() else None
+    # accept legacy "complete_match" as an alias for match_text
+    mt = data.get("match_text") if data.get("match_text") is not None else data.get("complete_match")
+    mt = mt.strip() if isinstance(mt, str) and mt.strip() else None
     return {
         "intent": intent,
         "tasks": _clean_tasks(data.get("tasks")),
         "pool_filter": {"category": cat, "section": pf.get("section") or None},
-        "complete_match": cm,
+        "match_text": mt,
     }
 
 
@@ -132,7 +135,7 @@ def extract_message(user_text, task_list, channels=LLM_CHANNELS, caller=call_cha
     retries the same channel once. Raises AllChannelsFailed if all fail.
 
     Returns:
-        dict: {intent, tasks, pool_filter, complete_match}
+        dict: {intent, tasks, pool_filter, match_text}
     """
     messages = build_messages(user_text, task_list)
     errors = []

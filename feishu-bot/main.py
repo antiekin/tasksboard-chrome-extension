@@ -19,7 +19,10 @@ from lark_oapi.api.im.v1 import (
 from config import load_keys
 from dedup_store import DedupStore
 from task_extractor import extract_message, summarize_tasks
-from todo_writer import write_tasks, complete_task, query_today, query_pool, read_todo
+from todo_writer import (
+    write_tasks, complete_task, delete_task,
+    query_today, query_pool_by_section, read_todo,
+)
 from feishu_listener import handle_message
 import todo_parser
 
@@ -64,8 +67,9 @@ _deps = types.SimpleNamespace(
     extract=extract_message,
     write=write_tasks,
     complete=complete_task,
+    delete=delete_task,
     query_today=query_today,
-    query_pool=query_pool,
+    query_pool_by_section=query_pool_by_section,
 )
 
 
