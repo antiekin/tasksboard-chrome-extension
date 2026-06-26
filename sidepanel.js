@@ -1390,6 +1390,7 @@ async function completePoolItem(id) {
   renderTodoSections();   // pool re-render (existing / Task 15)
   renderToday();
   if (typeof refreshBoard === 'function') refreshBoard();
+  logCompletion(item);   // 写完成日志 + 刷新今日页「额外完成」（之前漏了这条真实路径）
 }
 
 /**
