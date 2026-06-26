@@ -278,3 +278,13 @@ MIT License - 自由使用和修改
 ---
 
 **注意**：本插件所有数据存储在本地浏览器中，不会上传到任何服务器。
+
+## 飞书任务机器人(子项目 feishu-bot/，2026-06-25)
+
+独立 Python 子项目:手机飞书发消息 → LLM 提炼 → 写 Obsidian `1_memory/todo.md`,与扩展通过 `todo.md` 解耦。iMac LaunchAgent 24/7 常驻。
+
+- **v1**:加任务 + 设 `#今日`(纯文字 → LLM → todo.md);白名单 + message_id 幂等;OpenRouter 优先→云雾兜底;端到端验证 + 长连接断线自愈
+- **v2**:LLM 意图路由(add / query_today / query_pool / complete)+ Python `todo.md` parser/serializer(移植 `todo-sync.js`)+ 标记完成(LLM 最匹配定位)
+- **v3**:删除任务;查询按 section 分组、标完成状态;新增/完成后附带状态总览;完成强激励文案;**每日完成日志**(`1_memory/tasks/YYYYMMDD_完成日志.md`,完成即记带时间)+ **每天 03:00 自动清理**已完成项(todo.md 保持干净,历史进日志)
+- 66 单元测试;两个 LaunchAgent(`com.feishu-task-bot.runner` + `com.feishu-task-cleanup.runner`);PR #1
+- Token usage:token_stats 脚本未找到会话文件,无法精确统计;本 session 工作量大(v1 完整 SDD + v2 + v3 多轮),估算 ~1.5–2M tokens 量级

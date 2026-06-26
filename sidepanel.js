@@ -18,6 +18,7 @@ let obsidianSync = null;
 
 /** @type {TodoSync|null} */
 let todoSync = null;
+let todayCompleted = [];   // today's completions read from the Feishu bot log
 let todoData = { preamble: '', sections: [] };
 let todoSaveTimeout = null;
 
@@ -106,11 +107,61 @@ function renderToday() {
   // Streak display — refreshStreakMini defined by Task 11; stub if absent
   if (typeof refreshStreakMini === 'function') refreshStreakMini();
 
+  renderTodayExtra(mustDo);
+
   // Hide celebration and board when not all must-do items are complete
   if (!allMustDoComplete(todoData)) {
     document.getElementById('celebrate').style.display = 'none';
     document.getElementById('board').style.display = 'none';
   }
+}
+
+function renderTodayExtra(mustDo) {
+  const mustDoTexts = new Set(mustDo.map(i => i.text));
+  const extra = todayCompleted.filter(c => !mustDoTexts.has(c.text));
+  const extraEl = document.getElementById('today-extra');
+  if (extraEl) {
+    extraEl.innerHTML = '';
+    if (extra.length > 0) {
+      extraEl.style.display = 'block';
+      const head = document.createElement('div');
+      head.className = 'extra-head';
+      head.textContent = '✨ 今天额外完成';
+      extraEl.appendChild(head);
+      for (const c of extra) {
+        const row = document.createElement('div');
+        row.className = 'extra-done-row';
+        row.textContent = '✅ ' + c.text;
+        extraEl.appendChild(row);
+      }
+    } else {
+      extraEl.style.display = 'none';
+    }
+  }
+  const doneMain = mustDo.filter(i => i.completed).length;
+  const totalDone = doneMain + extra.length;
+  const cheerEl = document.getElementById('today-cheer');
+  if (cheerEl) {
+    if (totalDone > 0) {
+      cheerEl.style.display = 'block';
+      const allDone = mustDo.length > 0 && doneMain === mustDo.length;
+      cheerEl.textContent = allDone
+        ? '🎉 今日必做全部完成，还额外做了 ' + extra.length + ' 件，今天太棒了！'
+        : '💪 今天已完成 ' + totalDone + ' 件，保持这个势头！';
+    } else {
+      cheerEl.style.display = 'none';
+    }
+  }
+}
+
+async function loadTodayCompleted() {
+  try {
+    if (obsidianSync && obsidianSync.connected && typeof obsidianSync.readTodayCompletionLog === 'function') {
+      const md = await obsidianSync.readTodayCompletionLog();
+      todayCompleted = parseCompletionLog(md || '');
+      renderToday();
+    }
+  } catch (e) { /* offline is fine */ }
 }
 
 /**
@@ -374,6 +425,8 @@ async function initSync() {
 
         // Start polling for changes
         obsidianSync.startPolling();
+        loadTodayCompleted();
+        setInterval(loadTodayCompleted, 30000);
 
         // Init todo sync using the same connection
         await initTodoSync(syncConfig, obsidianSync.apiUrl);
