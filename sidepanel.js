@@ -1273,11 +1273,56 @@ function flashEncouragement(text) {
  * Trigger the full completion feedback suite: encouragement, confetti, chime.
  * @param {boolean} isOverAchieve - true when completing a bonus (over-achieve) item
  */
+/** 全部达成庆祝用的「开花小花园」SVG（蜜桃花园设计，静态） */
+const CELEBRATE_SVG = `<svg viewBox="0 0 132 100" aria-hidden="true">
+          <ellipse cx="66" cy="90" rx="50" ry="7" fill="#EBD7BE" opacity=".5"/>
+          <!-- 左侧绽放的花 -->
+          <g class="bloomf">
+            <line x1="26" y1="90" x2="26" y2="64" stroke="#5F8369" stroke-width="2.6" stroke-linecap="round"/>
+            <path d="M26 78 C18 78 14 73 14 68 C22 68 26 72 26 78Z" fill="#8FB39A"/>
+            <circle cx="26" cy="56" r="5.4" fill="#F4A982"/><circle cx="34" cy="61" r="5.4" fill="#F4A982"/><circle cx="31" cy="70" r="5.4" fill="#F4A982"/><circle cx="21" cy="70" r="5.4" fill="#F4A982"/><circle cx="18" cy="61" r="5.4" fill="#F4A982"/>
+            <circle cx="26" cy="63" r="4" fill="#FBD46B"/>
+          </g>
+          <!-- 右侧绽放的花 -->
+          <g class="bloomf f2">
+            <line x1="106" y1="90" x2="106" y2="64" stroke="#5F8369" stroke-width="2.6" stroke-linecap="round"/>
+            <path d="M106 78 C114 78 118 73 118 68 C110 68 106 72 106 78Z" fill="#8FB39A"/>
+            <circle cx="106" cy="56" r="5.4" fill="#E8896B"/><circle cx="114" cy="61" r="5.4" fill="#E8896B"/><circle cx="111" cy="70" r="5.4" fill="#E8896B"/><circle cx="101" cy="70" r="5.4" fill="#E8896B"/><circle cx="98" cy="61" r="5.4" fill="#E8896B"/>
+            <circle cx="106" cy="63" r="4" fill="#FBD46B"/>
+          </g>
+          <!-- 中间小芽（开心） -->
+          <g>
+            <path d="M50 70 h32 l-3 16 a4.5 4.5 0 0 1-4.5 3.6 H57.5 a4.5 4.5 0 0 1-4.5-3.6 Z" fill="#E8896B"/>
+            <rect x="48" y="65.5" width="36" height="7.5" rx="3.75" fill="#D2694B"/>
+            <path d="M66 70 V49" stroke="#5F8369" stroke-width="3" stroke-linecap="round"/>
+            <path d="M66 58 C57 58 52 51.5 52 46 C60 46 66 50.5 66 58Z" fill="#8FB39A"/>
+            <path d="M66 56 C75 56 80 49.5 80 44 C72 44 66 48.5 66 56Z" fill="#A6C6AE"/>
+            <circle cx="66" cy="42" r="9" fill="#F4C9A8"/>
+            <path d="M60.6 42.4 q1.7 -2.2 3.4 0" stroke="#4A3A31" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+            <path d="M68 42.4 q1.7 -2.2 3.4 0" stroke="#4A3A31" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+            <path d="M62.6 45.6 q3.4 3 6.8 0" stroke="#4A3A31" stroke-width="1.2" fill="none" stroke-linecap="round"/>
+            <circle cx="59.4" cy="45" r="1.7" fill="#E8896B" opacity=".55"/>
+            <circle cx="72.6" cy="45" r="1.7" fill="#E8896B" opacity=".55"/>
+          </g>
+          <!-- 闪光 -->
+          <path d="M40 28 l1.4 3.4 3.4 1.4 -3.4 1.4 -1.4 3.4 -1.4 -3.4 -3.4 -1.4 3.4 -1.4Z" fill="#FBD46B"/>
+          <path d="M95 24 l1.1 2.7 2.7 1.1 -2.7 1.1 -1.1 2.7 -1.1 -2.7 -2.7 -1.1 2.7 -1.1Z" fill="#F4A982"/>
+        </svg>`;
+
+/** 小芽伙伴：完成时蹦跳欢呼一下 */
+function cheerMascot() {
+  const m = document.getElementById('mascot');
+  if (!m) return;
+  m.classList.add('cheer');
+  setTimeout(() => m.classList.remove('cheer'), 650);
+}
+
 function triggerCompletionFx(isOverAchieve) {
   const pool = isOverAchieve ? ENCOURAGE_OVER : ENCOURAGE;
   flashEncouragement(pool[(Math.random() * pool.length) | 0]);
   fireConfetti({ gold: isOverAchieve, count: isOverAchieve ? 120 : 70 });
   playChime(isOverAchieve ? 'over' : 'base');
+  cheerMascot();
 }
 
 /**
@@ -1293,7 +1338,7 @@ function showAllDoneCelebration() {
 
   const trophy = document.createElement('div');
   trophy.className = 'trophy';
-  trophy.textContent = '\u{1F3C6}';   // 🏆 — 8-hex escape avoids surrogate issues
+  trophy.innerHTML = CELEBRATE_SVG;   // 蜜桃花园 · 开花庆祝（静态 SVG，无注入风险）
 
   const title = document.createElement('div');
   title.className = 'title';
