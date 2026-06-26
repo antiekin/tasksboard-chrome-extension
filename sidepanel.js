@@ -1,8 +1,6 @@
 // Sidepanel UI Controller
 // Handles all UI interactions and DOM manipulation
 
-// Initialize task manager
-const taskManager = new TaskManager();
 
 // DOM elements
 let settingsBtn, settingsPanel, syncIndicator, syncDot, syncLabel;
@@ -219,12 +217,8 @@ async function handleDailyArchive(dateStr) {
     if (hist[dateStr] && hist[dateStr].mustDoTotal > 0) return;
 
     const extra = await storage.getTodayExtra(dateStr);
-    const mustDo = getMustDoItems(todoData).map(i => ({ text: i.text, completed: i.completed }));
     const record = buildDayRecord(todoData, extra);
     await storage.saveCompletionDay(dateStr, record);
-    if (obsidianSync && obsidianSync.connected) {
-      await obsidianSync.writeDailyLog(dateStr, mustDo, record.overAchieved);
-    }
     // Clear #今日 flags across all sections — persist synchronously so flags
     // survive a midnight panel teardown (don't rely on 300ms debounce)
     for (const s of todoData.sections) {
@@ -301,9 +295,6 @@ document.addEventListener('DOMContentLoaded', async () => {
  */
 async function loadData() {
   try {
-    const tasks = await storage.getAllTasks();
-    taskManager.loadTasks(tasks);
-
     preferences = await storage.getPreferences();
     todoData = await storage.getTodoData();
   } catch (error) {
@@ -360,35 +351,6 @@ function setupTabSwitching() {
 
 
 /**
- * Save tasks with debouncing (300ms)
- * Also syncs to Obsidian if sync is enabled
- */
-function saveTasksDebounced() {
-  if (saveTimeout) {
-    clearTimeout(saveTimeout);
-  }
-  // Mark that we have pending local changes (prevents remote overwrite during active editing)
-  if (obsidianSync) {
-    obsidianSync.pendingLocalChanges = true;
-  }
-
-  saveTimeout = setTimeout(async () => {
-    try {
-      const allTasks = taskManager.getAllTasks();
-      // Save to chrome.storage.local (always, as cache/fallback)
-      await storage.saveTasks(allTasks);
-      // Sync to Obsidian if connected
-      if (obsidianSync?.connected) {
-        await obsidianSync.syncToRemote(allTasks);
-      }
-    } catch (error) {
-      console.error('Failed to save tasks:', error);
-      showError('保存失败，请重试');
-    }
-  }, 300);
-}
-
-/**
  * Show error message
  */
 function showError(message) {
@@ -414,54 +376,22 @@ async function initSync() {
 
     if (syncConfig.syncEnabled && syncConfig.apiKey) {
       obsidianSync = new ObsidianSync(syncConfig);
-      obsidianSync.onRemoteChange = handleRemoteChange;
       obsidianSync.onConnectionChange = updateSyncIndicator;
-
-      // Show sync indicator
       syncIndicator.style.display = 'flex';
 
-      // Test connection first (determines HTTPS vs HTTP URL, and validates the key)
+      // obsidianSync is now used ONLY for completion-log read/write; the
+      // todo-list two-way sync (todoSync) is the real data layer and drives
+      // the connection indicator.
       const result = await obsidianSync.testConnection();
       if (result.ok) {
-        // Try initial sync: load from remote if available
-        const remoteMd = await obsidianSync.readRemoteFile();
-        if (remoteMd) {
-          const remoteTasks = obsidianSync.markdownToTasks(remoteMd);
-          obsidianSync.lastSyncedContent = remoteMd;
-          const localTasks = taskManager.getAllTasks();
-          const matchedTasks = obsidianSync.matchRemoteToLocal(remoteTasks, localTasks);
-          taskManager.loadFromParsedTasks(matchedTasks);
-          await storage.saveTasks(taskManager.getAllTasks());
-        } else {
-          // Connected but no file yet — push current tasks to create the file
-          await obsidianSync.syncToRemote(taskManager.getAllTasks());
-        }
-
-        // Start polling for changes
-        obsidianSync.startPolling();
         loadTodayCompleted();
         setInterval(loadTodayCompleted, 30000);
-
-        // Init todo sync using the same connection
         await initTodoSync(syncConfig, obsidianSync.apiUrl);
       }
     }
   } catch (error) {
     console.error('Failed to initialize sync:', error);
   }
-}
-
-/**
- * Handle remote changes detected by polling
- * @param {Array} remoteTasks - Tasks parsed from remote markdown
- */
-function handleRemoteChange(remoteTasks) {
-  const localTasks = taskManager.getAllTasks();
-  const matchedTasks = obsidianSync.matchRemoteToLocal(remoteTasks, localTasks);
-  taskManager.loadFromParsedTasks(matchedTasks);
-  renderToday();
-  // Update local cache
-  storage.saveTasks(taskManager.getAllTasks());
 }
 
 /**
@@ -517,7 +447,6 @@ async function handleSaveSettings() {
 
   // Stop any existing sync before reconfiguring
   if (obsidianSync) {
-    obsidianSync.stopPolling();
     obsidianSync = null;
   }
   if (todoSync) {
@@ -535,7 +464,6 @@ async function handleSaveSettings() {
   // 2) Bring up the connection. Failures here do NOT undo the saved config —
   //    report the specific reason instead of a generic "save failed".
   obsidianSync = new ObsidianSync(syncConfig);
-  obsidianSync.onRemoteChange = handleRemoteChange;
   obsidianSync.onConnectionChange = updateSyncIndicator;
   syncIndicator.style.display = 'flex';
 
@@ -546,14 +474,12 @@ async function handleSaveSettings() {
     return;
   }
 
-  // 3) Initial push + start polling. Surface the HTTP status if the push fails.
+  // 3) Start the todo-list sync (v3 data layer; it also drives the indicator).
   try {
-    await obsidianSync.syncToRemote(taskManager.getAllTasks());
-    obsidianSync.startPolling();
     await initTodoSync(syncConfig, obsidianSync.apiUrl);
     settingsPanel.style.display = 'none';
   } catch (error) {
-    console.error('Initial sync push failed:', error);
+    console.error('Initial sync failed:', error);
     showError('配置已保存,但首次同步失败:' + describeSyncError(error));
   }
 }
@@ -627,6 +553,7 @@ async function initTodoSync(syncConfig, apiUrl) {
     });
 
     todoSync.onRemoteChange = handleTodoRemoteChange;
+    todoSync.onConnectionChange = updateSyncIndicator;
     todoSync.connected = true;
 
     // Initial load from remote
@@ -965,24 +892,6 @@ function handleTodoAdd(sectionName) {
       sel.addRange(range);
     }
   }, 100);
-}
-
-/**
- * Handle toggling a todo item's completed state
- * @param {string} sectionName
- * @param {string} itemId
- */
-function handleTodoToggle(sectionName, itemId) {
-  const section = todoData.sections.find(s => s.name === sectionName);
-  if (!section) return;
-  const item = section.items.find(i => i.id === itemId);
-  if (!item) return;
-
-  const wasCompleted = item.completed;
-  item.completed = !item.completed;
-  saveTodoDebounced();
-  renderTodoSections();
-  if (!wasCompleted && item.completed) logCompletion(item);
 }
 
 /**
