@@ -1167,6 +1167,7 @@ function saveTodoDebounced() {
   }
   if (todoSync) {
     todoSync.pendingLocalChanges = true;
+    todoSync.lastLocalEditAt = Date.now();
   }
 
   todoSaveTimeout = setTimeout(async () => {
