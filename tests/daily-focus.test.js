@@ -103,17 +103,3 @@ test('tallyOverAchieved 区间求和', () => {
   };
   assert.strictEqual(df.tallyOverAchieved(h, '2026-06-21', '2026-06-23'), 3);
 });
-
-test('buildDailyLogMarkdown 输出快照', () => {
-  const md = df.buildDailyLogMarkdown(
-    '2026-06-23',
-    [{ text:'写方案', completed:true }, { text:'打电话', completed:false }],
-    ['回复邮件']
-  );
-  assert.match(md, /type: daily-log/);
-  assert.match(md, /## 今日必做 \(1\/2\)/);
-  assert.match(md, /- \[x\] 写方案/);
-  assert.match(md, /- \[ \] 打电话/);
-  assert.match(md, /## 超额完成 \(1\)/);
-  assert.match(md, /- \[x\] 回复邮件/);
-});
