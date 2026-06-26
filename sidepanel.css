@@ -833,3 +833,9 @@ body {
   padding: 4px 8px;
   color: #389e0d;
 }
+
+/* 任务池:设为今日 / 取消今日(toggle 的取消态) */
+.set-mustdo-btn.is-today {
+  filter: grayscale(0.25);
+  opacity: 0.8;
+}
