@@ -32,3 +32,27 @@ test('today=false 不输出 #今日', () => {
   const out = ts.toMarkdown(ts.parseTodoMarkdown(md));
   assert.doesNotMatch(out, /#今日/);
 });
+
+test('checkRemoteChanges：保护窗口内的本地改动 → 跳过远端拉取', async () => {
+  const t = new TodoSync({});
+  t.readRemoteFile = async () => '# T\n## S\n- [x] 任务\n';
+  t.pendingLocalChanges = true;
+  t.lastLocalEditAt = Date.now();          // 刚刚编辑
+  let pulled = false;
+  t.onRemoteChange = () => { pulled = true; };
+  await t.checkRemoteChanges();
+  assert.strictEqual(pulled, false, '窗口内应保护本地、跳过远端');
+  assert.strictEqual(t.pendingLocalChanges, true);
+});
+
+test('checkRemoteChanges：保护窗口过期 → 放行远端并清标志（离线死锁修复）', async () => {
+  const t = new TodoSync({ localEditGuardMs: 50 });
+  t.readRemoteFile = async () => '# T\n## S\n- [x] 任务\n';
+  t.pendingLocalChanges = true;
+  t.lastLocalEditAt = Date.now() - 5000;   // 5 秒前编辑，远超 50ms 窗口
+  let pulled = false;
+  t.onRemoteChange = () => { pulled = true; };
+  await t.checkRemoteChanges();
+  assert.strictEqual(pulled, true, '窗口过期应放行远端拉取');
+  assert.strictEqual(t.pendingLocalChanges, false, '过期应清除标志，解除死锁');
+});

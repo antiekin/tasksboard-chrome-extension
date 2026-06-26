@@ -21,6 +21,11 @@ class TodoSync {
     this.connected = false;
     this.pollTimer = null;
     this.pendingLocalChanges = false;
+    /** 最近一次本地编辑的时间戳；配合 localEditGuardMs 限定本地保护窗口 */
+    this.lastLocalEditAt = 0;
+    /** 本地编辑保护窗口（ms）。超过后即使有 pendingLocalChanges 也放行远端拉取，
+     *  避免「离线编辑置位、又永远无法上传」导致远端更新被永久跳过的死锁。 */
+    this.localEditGuardMs = config.localEditGuardMs || 10000;
 
     /** @type {function(Object):void|null} Called when remote changes detected */
     this.onRemoteChange = null;
@@ -320,8 +325,13 @@ class TodoSync {
       // Skip if content hasn't changed
       if (remoteMd === this.lastSyncedContent) return;
 
-      // Skip if we have pending local changes (local wins during active editing)
-      if (this.pendingLocalChanges) return;
+      // 本地正在活跃编辑时跳过远端拉取，保护未上传的改动不被覆盖——
+      // 但只在一个短窗口内有效。否则离线时的一次编辑会把 pendingLocalChanges 置位，
+      // 而离线又永远无法上传清零，导致远端（飞书/iMac）的更新被永久跳过（离线死锁）。
+      if (this.pendingLocalChanges) {
+        if (Date.now() - this.lastLocalEditAt < this.localEditGuardMs) return;
+        this.pendingLocalChanges = false;   // 保护窗口已过 → 不再阻塞远端
+      }
 
       // Remote content changed — parse and notify
       const data = this.parseTodoMarkdown(remoteMd);
