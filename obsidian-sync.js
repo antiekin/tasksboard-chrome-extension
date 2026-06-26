@@ -32,6 +32,33 @@ class ObsidianSync {
    * Get today's file path within the vault
    * @returns {string} e.g. "0. 目标及计划/Daily/20260209_Daily_Tasks.md"
    */
+  async appendTodayCompletion(text, category) {
+    try {
+      const now = new Date();
+      const hm = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+      const cat = category ? ' #' + category : '';
+      const line = '- ' + hm + ' ' + text + cat;
+      const existing = await this.readTodayCompletionLog();
+      let content;
+      if (existing == null) {
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const readable = y + '-' + m + '-' + d;
+        content = '---\ndate: ' + readable + '\ntype: completion-log\n---\n# ' + readable + ' 完成日志\n\n' + line + '\n';
+      } else {
+        if (existing.indexOf(line) !== -1) return true;
+        content = existing.replace(/\n*$/, '') + '\n' + line + '\n';
+      }
+      const filePath = this.getTodayCompletionLogPath();
+      const encodedPath = filePath.split('/').map(encodeURIComponent).join('/');
+      const res = await this.apiRequest('PUT', `/vault/${encodedPath}`, content);
+      return res.ok;
+    } catch (e) {
+      return false;
+    }
+  }
+
   getTodayCompletionLogPath() {
     const now = new Date();
     const y = now.getFullYear();

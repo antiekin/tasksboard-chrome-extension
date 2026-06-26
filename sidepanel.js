@@ -181,6 +181,15 @@ function findTodoItem(id) {
  * Mark a must-do item as completed
  * @param {string} id - Todo item id
  */
+async function logCompletion(item) {
+  if (obsidianSync && obsidianSync.connected && typeof obsidianSync.appendTodayCompletion === 'function') {
+    try {
+      await obsidianSync.appendTodayCompletion(item.text, item.category);
+      await loadTodayCompleted();
+    } catch (e) { /* offline is fine */ }
+  }
+}
+
 async function completeMustDoItem(id) {
   const item = findTodoItem(id);
   if (!item || item.completed) return;
@@ -192,6 +201,7 @@ async function completeMustDoItem(id) {
   if (allMustDoComplete(todoData) && typeof showAllDoneCelebration === 'function') {
     showAllDoneCelebration();
   }
+  logCompletion(item);
 }
 
 /**
@@ -779,14 +789,15 @@ function createTodoItemElement(item, sectionName) {
 
   // Set-as-must-do button (🎯) — only for incomplete, non-today pool items
   let mustdoBtn = null;
-  if (!item.completed && !item.today) {
+  if (!item.completed) {
     mustdoBtn = document.createElement('button');
-    mustdoBtn.className = 'set-mustdo-btn';
-    mustdoBtn.textContent = '\u{1F3AF}';
-    mustdoBtn.title = '设为今日必做';
+    mustdoBtn.className = 'set-mustdo-btn' + (item.today ? ' is-today' : '');
+    mustdoBtn.textContent = item.today ? '\u{21A9}' : '\u{1F3AF}';
+    mustdoBtn.title = item.today ? '取消今日必做' : '设为今日必做';
     mustdoBtn.addEventListener('click', (e) => {
       e.stopPropagation();
-      setMustDo(item.id);
+      if (item.today) unsetMustDo(item.id);
+      else setMustDo(item.id);
     });
   }
 
@@ -951,9 +962,11 @@ function handleTodoToggle(sectionName, itemId) {
   const item = section.items.find(i => i.id === itemId);
   if (!item) return;
 
+  const wasCompleted = item.completed;
   item.completed = !item.completed;
   saveTodoDebounced();
   renderTodoSections();
+  if (!wasCompleted && item.completed) logCompletion(item);
 }
 
 /**
@@ -1304,6 +1317,15 @@ async function setMustDo(id) {
   const item = findTodoItem(id);
   if (!item) return;
   item.today = true;
+  await saveTodoDebounced();
+  renderTodoSections();
+  renderToday();
+}
+
+async function unsetMustDo(id) {
+  const item = findTodoItem(id);
+  if (!item) return;
+  item.today = false;
   await saveTodoDebounced();
   renderTodoSections();
   renderToday();
