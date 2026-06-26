@@ -104,6 +104,10 @@ function renderToday() {
   if (mdDoneEl) mdDoneEl.textContent = done;
   if (mdTotalEl) mdTotalEl.textContent = mustDo.length;
 
+  // 进度环：百分比跟随完成数
+  const ringEl = document.getElementById('ring');
+  if (ringEl) ringEl.style.setProperty('--p', mustDo.length ? Math.round(done / mustDo.length * 100) : 0);
+
   // Streak display — refreshStreakMini defined by Task 11; stub if absent
   if (typeof refreshStreakMini === 'function') refreshStreakMini();
 
@@ -801,56 +805,68 @@ function createTodoItemElement(item, sectionName) {
     });
   }
 
-  // Move button with dropdown
-  const moveBtn = document.createElement('div');
+  // —— 次要操作收进 ⋯ 更多菜单 ——
+  const taskActions = document.createElement('div');
+  taskActions.className = 'task-actions';
+
+  const moreBtn = document.createElement('button');
+  moreBtn.className = 'more-btn';
+  moreBtn.textContent = '⋯';
+  moreBtn.title = '更多操作';
+  moreBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleTaskMenu(taskActions);
+  });
+
+  const moreMenu = document.createElement('div');
+  moreMenu.className = 'task-more-menu';
+  moreMenu.addEventListener('click', (e) => e.stopPropagation());
+
+  // 移动到…
+  const moveBtn = document.createElement('button');
   moveBtn.className = 'move-btn';
-  moveBtn.textContent = '↗';
+  moveBtn.textContent = '↗ 移动到…';
   moveBtn.title = '移动到…';
   moveBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     showMoveMenu(moveBtn, sectionName, item.id);
   });
+  moreMenu.appendChild(moveBtn);
 
-  // Delete button
-  const deleteBtn = document.createElement('div');
+  // 查看引用（若有）
+  if (item.reference) {
+    const refIcon = document.createElement('span');
+    refIcon.className = 'todo-reference';
+    refIcon.textContent = '🔗 查看引用';
+    const tooltip = document.createElement('span');
+    tooltip.className = 'todo-ref-tooltip';
+    tooltip.textContent = TodoSync.getRefDisplay(item.reference);
+    refIcon.appendChild(tooltip);
+    moreMenu.appendChild(refIcon);
+  }
+
+  // 删除
+  const deleteBtn = document.createElement('button');
   deleteBtn.className = 'delete-btn';
-  deleteBtn.textContent = '×';
+  deleteBtn.textContent = '🗑 删除';
+  deleteBtn.title = '删除';
   deleteBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     handleTodoDelete(sectionName, item.id);
   });
+  moreMenu.appendChild(deleteBtn);
 
-  // Assemble
+  taskActions.appendChild(moreBtn);
+  taskActions.appendChild(moreMenu);
+
+  // —— Assemble ——
   itemEl.appendChild(dragHandle);
   itemEl.appendChild(checkbox);
   itemEl.appendChild(priorityBadge);
   itemEl.appendChild(content);
   itemEl.appendChild(categoryTag);
-
-  // Reference icon with tooltip (if exists)
-  if (item.reference) {
-    const refIcon = document.createElement('span');
-    refIcon.className = 'todo-reference';
-    refIcon.textContent = '🔗';
-
-    const tooltip = document.createElement('span');
-    tooltip.className = 'todo-ref-tooltip';
-    tooltip.textContent = TodoSync.getRefDisplay(item.reference);
-    refIcon.appendChild(tooltip);
-
-    // Position tooltip on hover
-    refIcon.addEventListener('mouseenter', () => {
-      const rect = refIcon.getBoundingClientRect();
-      tooltip.style.top = `${rect.top - 28}px`;
-      tooltip.style.left = `${rect.left}px`;
-    });
-
-    itemEl.appendChild(refIcon);
-  }
-
   if (mustdoBtn) itemEl.appendChild(mustdoBtn);
-  itemEl.appendChild(moveBtn);
-  itemEl.appendChild(deleteBtn);
+  itemEl.appendChild(taskActions);
 
   return itemEl;
 }
@@ -1050,8 +1066,35 @@ function closeMoveMenu() {
   if (existing) existing.remove();
 }
 
+/** 关闭所有打开的「⋯ 更多」菜单 */
+function closeAllTaskMenus() {
+  document.querySelectorAll('.task-actions.open').forEach((box) => {
+    box.classList.remove('open', 'up');
+    const ti = box.closest('.task-item');
+    if (ti) ti.style.zIndex = '';
+  });
+}
+
+/** 切换某行的「⋯ 更多」菜单；靠近底部时向上翻 */
+function toggleTaskMenu(box) {
+  const wasOpen = box.classList.contains('open');
+  closeAllTaskMenus();
+  if (wasOpen) return;
+  box.classList.add('open');
+  const ti = box.closest('.task-item');
+  if (ti) ti.style.zIndex = '60';
+  const menu = box.querySelector('.task-more-menu');
+  const cont = document.querySelector('.container');
+  if (menu && cont) {
+    const mb = menu.getBoundingClientRect();
+    const cb = cont.getBoundingClientRect();
+    if (mb.bottom > cb.bottom - 6) box.classList.add('up');
+  }
+}
+
 // Close move menu on any outside click
 document.addEventListener('click', closeMoveMenu);
+document.addEventListener('click', closeAllTaskMenus);
 
 /**
  * Show a dropdown menu for moving a todo item
