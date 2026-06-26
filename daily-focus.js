@@ -81,6 +81,18 @@ function buildDailyLogMarkdown(dateStr, mustDoItems, overAchieved) {
   return lines.join('\n') + '\n';
 }
 
+function parseCompletionLog(md) {
+  const out = [];
+  if (!md) return out;
+  for (const line of md.split('\n')) {
+    const m = line.match(/^- (\d{1,2}:\d{2})\s+(.+)$/);
+    if (!m) continue;
+    const text = m[2].trim().replace(/\s+#(家庭|工作|健康|学习)\s*$/, '').trim();
+    out.push({ time: m[1], text });
+  }
+  return out;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { MAX_MUST_DO, getMustDoItems, countMustDo, canAddMustDo, allMustDoComplete, buildDayRecord, addDays, computeStreak, tallyOverAchieved, isAchieved, buildDailyLogMarkdown };
+  module.exports = { MAX_MUST_DO, getMustDoItems, countMustDo, canAddMustDo, allMustDoComplete, buildDayRecord, addDays, computeStreak, tallyOverAchieved, isAchieved, buildDailyLogMarkdown, parseCompletionLog };
 }
