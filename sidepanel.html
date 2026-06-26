@@ -8,77 +8,108 @@
 </head>
 <body>
   <div class="container">
-    <!-- Header with Tab Bar -->
+
     <div class="header">
       <div class="tab-bar">
         <button class="tab active" data-tab="daily">今日任务</button>
         <button class="tab" data-tab="todo">任务池</button>
       </div>
-      <div style="display:flex;align-items:center;gap:4px;">
+      <div class="header-right">
         <div id="sync-indicator" class="sync-indicator" style="display:none;" title="Obsidian 同步状态">
           <span id="sync-dot" class="sync-dot"></span>
           <span id="sync-label" class="sync-label">离线</span>
         </div>
-        <button id="settings-btn" class="settings-btn" title="同步设置">&#9881;</button>
+        <button id="settings-btn" class="settings-btn" title="同步设置" aria-label="设置">&#9881;</button>
       </div>
     </div>
 
-    <!-- Settings Panel (hidden by default) -->
-    <div id="settings-panel" class="settings-panel" style="display:none;">
-      <div class="settings-field">
-        <label for="sync-enabled-input">
-          <input type="checkbox" id="sync-enabled-input" />
-          启用 Obsidian 同步
-        </label>
-      </div>
-      <div class="settings-field">
-        <label for="api-key-input">API Key</label>
-        <input type="password" id="api-key-input" placeholder="Obsidian Local REST API Key" />
-      </div>
-      <div class="settings-field">
-        <label for="vault-path-input">Daily Tasks 文件夹</label>
-        <input type="text" id="vault-path-input" value="0. 目标及计划/Daily" />
-      </div>
-      <div class="settings-field">
-        <label for="todo-file-path-input">To-do List 文件路径</label>
-        <input type="text" id="todo-file-path-input" value="9. To-do List/Todo_List.md" />
-      </div>
-      <div class="settings-actions">
-        <button id="test-connection-btn" class="settings-action-btn">测试连接</button>
-        <button id="save-settings-btn" class="settings-action-btn primary">保存</button>
-      </div>
-      <div id="connection-status" class="connection-status" style="display:none;"></div>
+  <div id="settings-panel" class="settings-panel" style="display:none;">
+    <div class="settings-field">
+      <label for="sync-enabled-input">
+        <input type="checkbox" id="sync-enabled-input">
+        启用 Obsidian 同步
+      </label>
     </div>
+    <div class="settings-field">
+      <label for="api-key-input">API Key</label>
+      <input type="password" id="api-key-input" placeholder="Obsidian Local REST API Key">
+    </div>
+    <div class="settings-field">
+      <label for="vault-path-input">Daily Tasks 文件夹</label>
+      <input type="text" id="vault-path-input" value="0. 目标及计划/Daily">
+    </div>
+    <div class="settings-field">
+      <label for="todo-file-path-input">To-do List 文件路径</label>
+      <input type="text" id="todo-file-path-input" value="9. To-do List/Todo_List.md">
+    </div>
+    <div class="settings-actions">
+      <button id="test-connection-btn" class="settings-action-btn">测试连接</button>
+      <button id="save-settings-btn" class="settings-action-btn primary">保存</button>
+    </div>
+    <div id="connection-status" class="connection-status" style="display:none;"></div>
+  </div>
 
-    <!-- Daily Tab Content -->
     <div id="daily-tab" class="tab-content active">
-      <div class="today-header">
-        <div class="today-progress"><span id="md-done">0</span> / <span id="md-total">0</span> 今日必做</div>
-        <div class="streak-mini" id="streak-mini" title="连续达成天数">🔥 <span id="streak-num">0</span></div>
+    <div class="ring-hero">
+      <!-- 圆形进度环（移植自方向 B） -->
+      <div class="ring" id="ring" style="--p:0;">
+        <div class="ring-center">
+          <svg class="ring-sprig" viewBox="0 0 24 22" aria-hidden="true">
+            <path d="M12 22 V11" stroke="#5F8369" stroke-width="2" stroke-linecap="round"/>
+            <path d="M12 14 C7 14 5 11 5 8 C9.5 8 12 10.5 12 14Z" fill="#8FB39A"/>
+            <path d="M12 12 C17 12 19 9 19 6 C14.5 6 12 8.5 12 12Z" fill="#A6C6AE"/>
+          </svg>
+          <div class="ring-num"><span id="md-done">0</span><span class="slash">/</span><span id="md-total">0</span></div>
+        </div>
       </div>
+      <div class="rh-info">
+        <div class="rh-label">🌿 今日小花园</div>
+        <div class="rh-title">今日必做</div>
+        <div class="streak-mini" id="streak-mini" title="连续达成天数"><span class="flame">🔥</span> 连续 <span id="streak-num">0</span> 天</div>
+      </div>
+      <!-- 小芽 伙伴（保留 A 的角色，完成时欢呼） -->
+      <svg class="sprout" id="mascot" viewBox="0 0 64 64" aria-label="小芽">
+        <ellipse cx="32" cy="58" rx="14" ry="3" fill="#C99A6E" opacity=".35"/>
+        <path d="M19 41 h26 l-2.6 15 a4 4 0 0 1-4 3.4 H25.6 a4 4 0 0 1-4-3.4 Z" fill="#E8896B"/>
+        <rect x="17" y="37.5" width="30" height="6.5" rx="3.25" fill="#D2694B"/>
+        <path d="M32 41 V25" stroke="#5F8369" stroke-width="2.6" stroke-linecap="round"/>
+        <path d="M32 31 C24.5 31 21 25.5 21 21 C27.5 21 32 24.6 32 31 Z" fill="#8FB39A"/>
+        <path d="M32 29 C39.5 29 43 23.5 43 19 C36.5 19 32 22.6 32 29 Z" fill="#A6C6AE"/>
+        <circle cx="32" cy="17.5" r="7.2" fill="#F4C9A8"/>
+        <circle cx="29.4" cy="17.5" r="1.15" fill="#4A3A31"/>
+        <circle cx="34.6" cy="17.5" r="1.15" fill="#4A3A31"/>
+        <path d="M29.8 20 q2.2 1.8 4.4 0" stroke="#4A3A31" stroke-width="1" fill="none" stroke-linecap="round"/>
+        <circle cx="27.6" cy="19.6" r="1.3" fill="#E8896B" opacity=".5"/>
+        <circle cx="36.4" cy="19.6" r="1.3" fill="#E8896B" opacity=".5"/>
+      </svg>
+    </div>
       <div id="today-cheer" class="today-cheer" style="display:none;"></div>
       <div id="must-do-list" class="must-do-list"></div>
       <div id="today-extra" class="today-extra" style="display:none;"></div>
-      <div id="today-empty" class="today-empty" style="display:none;">
-        <p>今天还没定必做</p>
-        <p class="empty-hint">去「任务池」挑 1-3 件,或在下面直接新建</p>
-      </div>
-      <button id="add-mustdo-btn" class="add-task-btn">+ 临时新建一个必做</button>
+    <div id="today-empty" class="today-empty" style="display:none;">
+      <svg class="empty-sprout" viewBox="0 0 64 64" aria-hidden="true">
+        <ellipse cx="32" cy="58" rx="15" ry="3" fill="#C99A6E" opacity=".3"/>
+        <path d="M19 41 h26 l-2.6 15 a4 4 0 0 1-4 3.4 H25.6 a4 4 0 0 1-4-3.4 Z" fill="#F4C9A8"/>
+        <rect x="17" y="37.5" width="30" height="6.5" rx="3.25" fill="#EBB68C"/>
+        <path d="M32 41 V30" stroke="#A6C6AE" stroke-width="2.4" stroke-linecap="round"/>
+        <circle cx="32" cy="25" r="4" fill="#CFE0CF"/>
+        <circle cx="29.8" cy="23.5" r="1" fill="#7C6A5E"/><circle cx="34.2" cy="23.5" r="1" fill="#7C6A5E"/>
+      </svg>
+      <p>今天还没种下必做 🌱</p>
+      <p class="empty-hint">去「任务池」挑 1-3 件，或在下面直接新建<br>少少几件，专注完成就好</p>
+    </div>
+      <button id="add-mustdo-btn" class="add-task-btn">＋ 临时新建一个必做</button>
       <div id="celebrate" class="celebrate" style="display:none;"></div>
       <div id="board" class="board" style="display:none;"></div>
       <canvas id="fx-canvas" class="fx-canvas"></canvas>
     </div>
 
-    <!-- Todo Tab Content -->
     <div id="todo-tab" class="tab-content">
-      <div id="todo-sections-container" class="todo-sections-container">
-        <!-- Todo sections will be rendered here -->
-      </div>
+      <div id="todo-sections-container" class="todo-sections-container"></div>
     </div>
 
   </div>
 
-  <!-- Scripts -->
   <script src="storage.js"></script>
   <script src="task-manager.js"></script>
   <script src="daily-focus.js"></script>
